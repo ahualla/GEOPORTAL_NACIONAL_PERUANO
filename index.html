@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GeoSpatial Perú - Plataforma de Análisis Satelital</title>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <style>
+        * { 
+            box-sizing: border-box; 
+            margin: 0; 
+            padding: 0; 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+        }
+        
+        body { 
+            display: flex; 
+            width: 100vw;
+            height: 100vh; 
+            overflow: hidden;
+            background-color: #f4f6f9; 
+            color: #333; 
+        }
+        
+        /* Sidebar (Panel de Control Izquierdo) */
+        #sidebar { 
+            width: 380px; 
+            min-width: 380px;
+            height: 100vh;
+            background: #ffffff; 
+            box-shadow: 4px 0 15px rgba(0,0,0,0.1); 
+            display: flex; 
+            flex-direction: column; 
+            z-index: 1000; 
+            overflow-y: auto; 
+        }
+        
+        .brand-header { 
+            padding: 20px; 
+            background: #2c3e50; 
+            color: #fff; 
+            display: flex; 
+            align-items: center; 
+            gap: 10px; 
+        }
+        
+        .brand-header h2 { 
+            font-size: 1.2rem; 
+            font-weight: 600; 
+            letter-spacing: 0.5px; 
+        }
+        
+        .section-panel { 
+            padding: 20px; 
+            border-bottom: 1px solid #eef2f5; 
+        }
+        
+        .section-title { 
+            font-size: 0.85rem; 
+            font-weight: 700; 
+            color: #7f8c8d; 
+            text-transform: uppercase; 
+            margin-bottom: 15px; 
+            letter-spacing: 0.5px; 
+        }
+        
+        .form-group { 
+            margin-bottom: 15px; 
+        }
+        
+        .form-group label { 
+            display: block; 
+            font-size: 0.85rem; 
+            font-weight: 600; 
+            color: #34495e; 
+            margin-bottom: 6px; 
+        }
+        
+        .form-control { 
+            width: 100%; 
+            padding: 10px 12px; 
+            border: 1px solid #dcdde1; 
+            border-radius: 6px; 
+            font-size: 0.9rem; 
+            color: #2c3e50; 
+            background-color: #fcfcfc; 
+            transition: all 0.3s ease; 
+        }
+        
+        .form-control:focus { 
+            border-color: #3498db; 
+            outline: none; 
+            background-color: #fff; 
+            box-shadow: 0 0 0 3px rgba(52,152,219,0.15); 
+        }
+        
+        .form-control:disabled { 
+            background-color: #f1f2f6; 
+            color: #7f8c8d; 
+            cursor: not-allowed; 
+        }
+        
+        .row-grid { 
+            display: grid; 
+            grid-template-columns: 1fr 1fr; 
+            gap: 12px; 
+        }
+        
+        .btn-container { 
+            display: grid; 
+            grid-template-columns: 1fr 1fr; 
+            gap: 12px; 
+            padding: 20px; 
+            background: #f8f9fa; 
+        }
+        
+        .btn { 
+            padding: 12px; 
+            border: none; 
+            border-radius: 6px; 
+            font-size: 0.9rem; 
+            font-weight: 600; 
+            cursor: pointer; 
+            transition: all 0.2s ease; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            gap: 8px; 
+        }
+        
+        .btn-primary { background: #3498db; color: #fff; }
+        .btn-primary:hover { background: #2980b9; }
+        
+        .btn-secondary { background: #e74c3c; color: #fff; }
+        .btn-secondary:hover { background: #c0392b; }
+        
+        /* Contenedor del Mapa y Capas del Lado Derecho */
+        #map-container { 
+            flex: 1; 
+            height: 100vh;
+            position: relative; 
+            display: flex; 
+            flex-direction: column; 
+        }
+        
+        #map { 
+            flex: 1; 
+            width: 100%; 
+            height: 100%; 
+        }
+        
+        /* Overlays flotantes del mapa */
+        .info-overlay { 
+            position: absolute; 
+            top: 20px; 
+            left: 20px; 
+            background: rgba(255,255,255,0.95); 
+            padding: 15px 20px; 
+            border-radius: 8px; 
+            box-shadow: 0 4px 15px rgba(0,0,0,0.15); 
+            z-index: 1000; 
+            border-left: 4px solid #2ecc71; 
+            min-width: 220px; 
+            pointer-events: auto; 
+        }
+        
+        .info-overlay h4 { 
+            font-size: 0.95rem; 
+            margin-bottom: 8px; 
+            color: #2c3e50; 
+            font-weight: 700; 
+        }
+        
+        .info-overlay p { 
+            font-size: 0.85rem; 
+            color: #555; 
+            margin-bottom: 4px; 
+            display: flex; 
+            justify-content: space-between; 
+        }
+        
+        .info-overlay span { 
+            font-weight: 600; 
+            color: #2c3e50; 
+        }
+        
+        .toolbar-right { 
+            position: absolute; 
+            top: 20px; 
+            right: 20px; 
+            z-index: 1000; 
+            display: flex; 
+            flex-direction: column; 
+            gap: 10px; 
+        }
+        
+        .toolbar-btn { 
+            width: 40px; 
+            height: 40px; 
+            background: #fff; 
+            border: none; 
+            border-radius: 8px; 
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1); 
+            cursor: pointer; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            font-size: 1.2rem; 
+            color: #2c3e50; 
+            transition: all 0.2s; 
+        }
+        
+        .toolbar-btn:hover { 
+            background: #f8f9fa; 
+            color: #3498db; 
+            transform: translateY(-2px); 
+        }
+        
+        /* Dashboard de Resultados Inferior */
+        .dashboard-results { 
+            display: grid; 
+            grid-template-columns: repeat(4, 1fr); 
+            gap: 15px; 
+            padding: 15px 20px; 
+            background: #fff; 
+            border-top: 1px solid #eef2f5; 
+            box-shadow: 0 -4px 10px rgba(0,0,0,0.02); 
+            z-index: 999; 
+        }
+        
+        .result-card { 
+            background: #f8f9fa; 
+            padding: 15px; 
+            border-radius: 8px; 
+            border: 1px solid #eef2f5; 
+            transition: all 0.3s; 
+        }
+        
+        .result-card:hover { 
+            transform: translateY(-3px); 
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05); 
+        }
+        
+        .result-card p { 
+            font-size: 0.75rem; 
+            font-weight: 700; 
+            color: #7f8c8d; 
+            text-transform: uppercase; 
+            margin-bottom: 5px; 
+            letter-spacing: 0.5px; 
+        }
+        
+        .result-card h1 { 
+            font-size: 1.4rem; 
+            color: #2c3e50; 
+            font-weight: 600; 
+        }
+        
+        /* Historial de Consultas (Tablas) */
+        .table-container { 
+            padding: 0 20px 20px 20px; 
+            max-height: 200px; 
+            overflow-y: auto; 
+        }
+        
+        .data-table { 
+            width: 100%; 
+            border-collapse: collapse; 
+            font-size: 0.8rem; 
+            text-align: left; 
+        }
+        
+        .data-table th { 
+            position: sticky; 
+            top: 0; 
+            background: #f4f6f9; 
+            padding: 10px; 
+            font-weight: 700; 
+            color: #7f8c8d; 
+            border-bottom: 2px solid #eef2f5; 
+        }
+        
+        .data-table td { 
+            padding: 10px; 
+            border-bottom: 1px solid #eef2f5; 
+            color: #34495e; 
+        }
+        
+        .data-table tbody tr:hover { background: #fcfcfc; }
+        
+        /* Descargas */
+        .container-descargas { 
+            display: grid; 
+            grid-template-columns: repeat(4, 1fr); 
+            gap: 10px; 
+        }
+        
+        .btn-download { 
+            padding: 8px; 
+            font-size: 0.8rem; 
+            border: 1px solid #dcdde1; 
+            background: #fff; 
+            border-radius: 6px; 
+            cursor: pointer; 
+            font-weight: 600; 
+            color: #555; 
+            transition: all 0.2s; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            gap: 6px; 
+        }
+        
+        .btn-download:hover { 
+            background: #f1f2f6; 
+            border-color: #b2bec3; 
+            color: #2c3e50; 
+        }
+        
+        /* Loader de Entrada */
+        #loader { 
+            position: fixed; 
+            top: 0; 
+            left: 0; 
+            width: 100vw; 
+            height: 100vh; 
+            background: rgba(44, 62, 80, 0.9); 
+            z-index: 9999; 
+            display: flex; 
+            flex-direction: column; 
+            justify-content: center; 
+            align-items: center; 
+            color: white; 
+            font-size: 1.5rem; 
+        }
+        
+        .spinner { 
+            width: 50px; 
+            height: 50px; 
+            border: 5px solid #f3f3f3; 
+            border-top: 5px solid #3498db; 
+            border-radius: 50%; 
+            animation: spin 1s linear infinite; 
+            margin-bottom: 15px; 
+        }
+        
+        @keyframes spin { 
+            0% { transform: rotate(0deg); } 
+            100% { transform: rotate(360deg); } 
+        }
+    </style>
+</head>
+<body>
+
+    <div id="loader">
+        <div class="spinner"></div>
+        <p>Inicializando recursos GIS...</p>
+    </div>
+
+    <div id="sidebar">
+        <div class="brand-header">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            </svg>
+            <h2>GEOSPATIAL PERÚ</h2>
+        </div>
+
+        <div class="section-panel">
+            <div class="section-title">1. Ubicación Administrativa</div>
+            <div class="form-group">
+                <label for="departamento">Departamento</label>
+                <select id="departamento" class="form-control">
+                    <option value="Seleccione...">Cargando...</option>
+                </select>
+            </div>
+            <div class="row-grid">
+                <div class="form-group">
+                    <label for="provincia">Provincia</label>
+                    <select id="provincia" class="form-control">
+                        <option value="Seleccione...">Seleccione...</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="distrito">Distrito</label>
+                    <select id="distrito" class="form-control">
+                        <option value="Seleccione...">Seleccione...</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <div class="section-panel">
+            <div class="section-title">2. Parámetros de Misión</div>
+            <div class="form-group">
+                <label for="satelite">Sensor Satelital</label>
+                <select id="satelite" class="form-control">
+                    <option value="Landsat 5">Landsat 5 (TM) [1984 - 2011]</option>
+                    <option value="Landsat 7">Landsat 7 (ETM+) [1999 - 2021]</option>
+                    <option value="Landsat 8">Landsat 8 (OLI) [2013 - Act]</option>
+                    <option value="Landsat 9">Landsat 9 (OLI-2) [2021 - Act]</option>
+                    <option value="Sentinel 2">Sentinel 2 (MSI) [2015 - Act]</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="objetivo">Objetivo del Estudio</label>
+                <select id="objetivo" class="form-control">
+                    <option value="Vegetación">Análisis de Vegetación</option>
+                    <option value="Agua">Recursos Hídricos y Humedad</option>
+                    <option value="Área Glacial">Zonas Criogénicas y Glaciares</option>
+                    <option value="Temperatura">Temperatura Superficial (LST)</option>
+                    <option value="Suelo">Geomorfología y Suelo Expuesto</option>
+                    <option value="Área Urbana">Expansión Urbana e Infraestructura</option>
+                    <option value="Incendios y Antropización">Incendios y Antropización</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="indice">Índice Espectral</label>
+                <select id="indice" class="form-control">
+                    <option value="NDVI">NDVI (Vegetación)</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="section-panel">
+            <div class="section-title">3. Temporalidad Análisis</div>
+            <div class="row-grid">
+                <div class="form-group">
+                    <label for="anioInicio">Año Inicial</label>
+                    <select id="anioInicio" class="form-control"></select>
+                </div>
+                <div class="form-group">
+                    <label for="anioFinal">Año Final</label>
+                    <select id="anioFinal" class="form-control"></select>
+                </div>
+            </div>
+        </div>
+
+        <div class="section-panel">
+            <div class="section-title">4. Exportación Científica</div>
+            <div class="container-descargas">
+                <button id="btnTiff" class="btn-download">💾 GeoTIFF</button>
+                <button id="btnShp" class="btn-download">📦 SHP</button>
+                <button id="btnPng" class="btn-download">📸 PNG</button>
+                <button id="btnPdf" class="btn-download">📄 PDF</button>
+            </div>
+        </div>
+
+        <div class="btn-container">
+            <button id="limpiar" class="btn btn-secondary">Limpiar</button>
+            <button id="consultar" class="btn btn-primary">Consultar</button>
+        </div>
+
+        <div class="section-title" style="padding: 20px 20px 5px 20px;">5. Historial de Consultas</div>
+        <div class="table-container">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Dep.</th>
+                        <th>Prov.</th>
+                        <th>Dist.</th>
+                        <th>Ind.</th>
+                        <th>Año</th>
+                        <th>Sat.</th>
+                        <th>Área</th>
+                    </tr>
+                </thead>
+                <tbody id="tablaResultados"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <div id="map-container">
+        <div id="map"></div>
+        
+        <div class="info-overlay">
+            <h4>Capa Activa GEE</h4>
+            <p>Índice Espectral: <span id="indiceNombre">NDVI</span></p>
+            <p>Plataforma Sensor: <span id="sensor">Landsat 5</span></p>
+            <p>Ventana Temporal: <span id="anio">2020</span></p>
+        </div>
+
+        <div class="toolbar-right">
+            <button class="toolbar-btn" title="Mapa Base OSM">🗺</button>
+            <button class="toolbar-btn" title="Geolocalización GPS">📍</button>
+            <button class="toolbar-btn" title="Pantalla Completa">📺</button>
+        </div>
+
+        <div class="dashboard-results">
+            <div class="result-card">
+                <p>Área de Estudio</p>
+                <h1 id="resArea">0 km²</h1>
+            </div>
+            <div class="result-card">
+                <p>Valor Promedio</p>
+                <h1 id="resProm">0.00</h1>
+            </div>
+            <div class="result-card">
+                <p>Valor Máximo</p>
+                <h1 id="resMax">0.00</h1>
+            </div>
+            <div class="result-card">
+                <p>Valor Mínimo</p>
+                <h1 id="resMin">0.00</h1>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    
+    <script src="js/ubigeo.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>
