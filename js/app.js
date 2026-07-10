@@ -220,6 +220,11 @@ provincia.addEventListener('change', () => {
     }
 });
 
+/*=======================================================================
+    SISTEMA DE ENLACE DE BACKEND (URL GLOBAL CONFIGURADA DE NGROK)
+=======================================================================*/
+const BASE_URL_API_REAL = "https://challenge-monastery-muzzle.ngrok-free.dev";
+
 /*==========================
     EVENTO CONSULTAR
 ==========================*/
@@ -307,7 +312,6 @@ btnConsultar.addEventListener("click", async () => {
             const filtradosEnParte = geojsonData.features.filter(f => {
                 if (!f.properties) return false;
 
-                // Mapeo tolerante inteligente para nombres de columnas
                 let propLugar = f.properties[nivelFiltro] || 
                                 f.properties[nivelFiltro.substring(0, 9)] || 
                                 f.properties[`NOM_${nivelFiltro.substring(0, 4)}`] || 
@@ -319,7 +323,7 @@ btnConsultar.addEventListener("click", async () => {
                               f.properties["DEPARTAMENTO"] || 
                               f.properties["NOM_DEP"] || 
                               f.properties["NOMDEP"] || 
-                              "";
+                              "" ;
 
                 const textoPropiedad = normalizarTexto(propLugar);
                 const textoDepartamento = normalizarTexto(propDep);
@@ -362,7 +366,8 @@ btnConsultar.addEventListener("click", async () => {
         const geometryParaPython = featuresFiltrados[0].geometry;
         ultimaGeometriaConsultada = geometryParaPython;
 
-        const respuestaBackend = await fetch('http://127.0.0.1:8000/calcular-indice-zona', {
+        // CORREGIDO CORRECCIÓN CRÍTICA: Conectando directamente con el Servidor Ngrok global
+        const respuestaBackend = await fetch(`${BASE_URL_API_REAL}/calcular-indice-zona`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -490,8 +495,6 @@ document.querySelector(".toolbar-right button:nth-child(3)").addEventListener("c
 /*=======================================================================
     SISTEMA DE DESCARGAS CIENTÍFICAS MEJORADO
 =======================================================================*/
-
-const BASE_URL_API_REAL = "https://challenge-monastery-muzzle.ngrok-free.dev";
 
 const btnTiff = document.getElementById("btnTiff");
 const btnShp  = document.getElementById("btnShp");
