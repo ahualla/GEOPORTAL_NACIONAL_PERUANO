@@ -36,7 +36,6 @@ try:
         
     else:
         # 2. Si no hay variable de entorno (desarrollo local), intentamos cargar el archivo JSON físico
-        # CAMBIA ESTE NOMBRE por el de tu JSON descargado si es diferente:
         ruta_json_local = "ee-tesistambopata1-ecf622e54bef.json" 
         
         if os.path.exists(ruta_json_local):
@@ -44,12 +43,12 @@ try:
             ee.Initialize(credentials, project='ee-tesistambopata1')
             print(f"✔ GEE conectado de forma local usando el archivo: {ruta_json_local}")
         else:
-            # 3. Fallback por si ejecutas en tu propia PC y ya estás logueado en la terminal
+            # 3. Fallback por si ejecutas en tu PC local y ya te logueaste con la CLI de gcloud/earthengine
             ee.Initialize(project='ee-tesistambopata1')
             print("✔ GEE conectado usando credenciales por defecto del sistema.")
 
 except Exception as e:
-    print("❌ Error crítico de conexión con Earth Engine:", e)
+    print("❌ Error crítico de conexión inicial con Earth Engine:", str(e))
 
 
 # Esquema estricto de entrada de datos desde el Frontend (app.js)
@@ -158,30 +157,30 @@ def calcular_todos_los_indices(image, indice_nombre, año):
 def obtener_paleta_y_rangos(indice_nombre):
     ind = indice_nombre.upper()
     
-    # 🌿 RAMPA 1: ÍNDICES DE VEGETACIÓN (Gradiente continuo de 9 pasos - Suelo a Bosque Amazónico)
+    # 🌿 RAMPA 1: ÍNDICES DE VEGETACIÓN
     if ind in ["NDVI", "EVI", "SAVI", "GCI", "MSAVI", "ARVI", "NDRE"]:
         paleta = [
-            '#4a3319',  # Marrón Profundo: Rocas, desiertos, minería total o pavimentos.
-            '#8c6239',  # Marrón Arcilloso: Suelos expuestos degradados o rastrojos agrícolas.
-            '#c69c6d',  # Ocre/Arena: Suelos con indicios mínimos de pastos secos.
-            '#e6d594',  # Amarillo Pálido: Vegetación escasa, matorral ralo o cultivos estresados.
-            '#b3e09b',  # Verde Menta: Vegetación de lomas, pastizales de jalca o brotes jóvenes.
-            '#78c679',  # Verde Claro Tradicional: Matorrales saludables o cultivos intermedios.
-            "#25b904",  # Verde Esmeralda: Bosque secundario o parcelas en pleno apogeo vigoroso.
-            '#238443',  # Verde Intenso: Cobertura arbórea forestal densa.
-            "#008A2A"   # Verde Profundo Opaco: Selva virgen intacta de alta biomasa (Dosel cerrado).
+            '#4a3319',  # Marrón Profundo
+            '#8c6239',  # Marrón Arcilloso
+            '#c69c6d',  # Ocre/Arena
+            '#e6d594',  # Amarillo Pálido
+            '#b3e09b',  # Verde Menta
+            '#78c679',  # Verde Claro
+            "#25b904",  # Verde Esmeralda
+            '#238443',  # Verde Intenso
+            "#008A2A"   # Verde Profundo Opaco
         ]
         return paleta, -0.05, 0.85
 
     # 💧 RAMPA 2: ÍNDICES DE AGUA Y HUMEDAD EDÁFICA
     elif ind in ["NDWI", "MNDWI", "NDMI", "LSWI"]:
         paleta = [
-            '#fcfaf2',  # Blanco Crema: Zonas áridas Continentales sin agua.
-            '#d0f4de',  # Verde/Celeste Húmedo: Suelos saturados o bofedales con vegetación.
-            '#a8ded9',  # Turquesa Somero: Canales inundables temporales o riberas con lodo.
-            '#43a2ca',  # Azul Claro Hidrológico: Cochas estables o lagunas de poca profundidad.
-            '#0868ac',  # Azul Clásico: Ríos dinámicos andinos o amazónicos.
-            '#012a4a'   # Azul de Alta Mar: Núcleos profundos de cuerpos de agua masivos.
+            '#fcfaf2',  # Blanco Crema
+            '#d0f4de',  # Verde/Celeste Húmedo
+            '#a8ded9',  # Turquesa Somero
+            '#43a2ca',  # Azul Claro
+            '#0868ac',  # Azul Clásico
+            '#012a4a'   # Azul de Alta Mar
         ]
         return paleta, -0.15, 0.70
 
@@ -193,32 +192,37 @@ def obtener_paleta_y_rangos(indice_nombre):
     # 🏗️ RAMPA 4: ÍNDICE DE SUELO DESNUDO (BSI)
     elif ind == "BSI":
         paleta = [
-            '#005f73',  # Azul Verdoso: Máxima cobertura forestal (Cero suelo expuesto).
-            '#94d2bd',  # Verde Claro: Áreas de transición natural.
-            '#e9d8a6',  # Amarillo: Suelo agrícola descansando o caminos afirmados.
-            '#ee9b00',  # Naranja: Zonas urbanas consolidadas o erosión moderada.
-            '#ca6702',  # Marrón Ladrillo: Suelos erosionados, taludes descubiertos o canteras.
-            '#9b2226'   # Rojo Sangre: Degradación crítica del suelo / Minería ilegal de parches de deforestación masiva.
+            '#005f73',  # Azul Verdoso
+            '#94d2bd',  # Verde Claro
+            '#e9d8a6',  # Amarillo
+            '#ee9b00',  # Naranja
+            '#ca6702',  # Marrón Ladrillo
+            '#9b2226'   # Rojo Sangre
         ]
         return paleta, -0.20, 0.50
 
-    # 🔥 RAMPA 5: INCENDIOS, QUEMAS O DEGRADACIÓN FORESTAL SEVERA (NBR, BAI, CRI)
+    # 🔥 RAMPA 5: INCENDIOS, QUEMAS O DEGRADACIÓN FORESTAL SEVERA
     else:
         paleta = [
-            '#2b9348',  # Verde Selva: Bosque saludable sin afectación de quemas.
-            '#e5e5e5',  # Gris Claro: Áreas estables artificiales o sin variaciones.
-            '#f4a261',  # Naranja: Estrés por fuego bajo o cicatriz muy antigua.
-            '#e76f51',  # Naranja Rojizo: Quema moderada de pastizales o matorrales.
-            '#b7094c',  # Carmesí: Pérdida severa de biomasa por fuego activo o tala.
-            '#510a32'   # Púrpura Oscuro: Ceniza acumulada o áreas críticas deforestadas recientemente.
+            '#2b9348',  # Verde Selva
+            '#e5e5e5',  # Gris Claro
+            '#f4a261',  # Naranja
+            '#e76f51',  # Naranja Rojizo
+            '#b7094c',  # Carmesí
+            '#510a32'   # Púrpura Oscuro
         ]
         return paleta, -0.25, 0.65
+
 
 # --- 4. RUTA PRINCIPAL CON RENDIMIENTO DE RENDERIZADO MEJORADO ---
 @app.post("/calcular-indice-zona")
 def procesar_mapa_zona(datos: ConsultaMapa):
     try:
-        # Forzar el CRS geográfico estándar compatible al 100% con Leaflet
+        # Asegurar inicialización previa a procesar la petición
+        if not ee.data._credentials:
+             raise Exception("Earth Engine no está inicializado. Verifica las credenciales en Render.")
+
+        # Forzar el CRS geográfico estándar compatible con Leaflet
         region_ee = ee.Geometry(datos.geometria, 'EPSG:4326')
         
         # 1. Recuperar la imagen óptima filtrada por nubes (40%) y compuesta anualmente
@@ -227,10 +231,10 @@ def procesar_mapa_zona(datos: ConsultaMapa):
         # 2. Calcular las operaciones de bandas matemáticas por píxel
         resultado_indice = calcular_todos_los_indices(imagen_base, datos.indice, datos.año)
         
-        # 3. Recortar (Clip) exacto para no consumir memoria innecesaria en el servidor de Google
+        # 3. Recortar (Clip) exacto para no consumir memoria innecesaria
         resultado_recortado = resultado_indice.clip(region_ee)
         
-        # 4. Inyectar la paleta hiperprofesional configurada
+        # 4. Inyectar la paleta configurada
         paleta, min_val, max_val = obtener_paleta_y_rangos(datos.indice)
         
         # Generar las credenciales de renderizado rápido del mapa web
@@ -248,35 +252,32 @@ def procesar_mapa_zona(datos: ConsultaMapa):
         }
         
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        # Registro explícito del error en la terminal de Render para que puedas leerlo
+        print(f"❌ Error al procesar el mapa: {str(e)}")
+        # Lanzamos HTTP 500 para que el frontend reconozca la caída de forma correcta
+        raise HTTPException(status_code=500, detail=f"Error en Google Earth Engine: {str(e)}")
+
 
 # ==============================================================================
 # --- 5. ENGINES ADICIONALES: ENDPOINTS INTEGRADOS PARA DESCARGAS CIENTÍFICAS ---
 # ==============================================================================
 
-# endpoint de descarga ráster de alta precisión (GeoTIFF nativo desde GEE)
 @app.post("/descargar-tiff")
 def descargar_tiff_zona(datos: ConsultaMapa):
     try:
-        # 1. Reconstruir la geometría espacial enviada en la consulta activa
+        if not ee.data._credentials:
+             raise Exception("Earth Engine no está inicializado.")
+
         region_ee = ee.Geometry(datos.geometria, 'EPSG:4326')
-        
-        # 2. Invocar la composición satelital con los mismos filtros de nubosidad
         imagen_base = obtener_imagen_por_año(datos.año, region_ee)
-        
-        # 3. Extraer el cálculo matemático puro del índice correspondiente (ej. NDSI o NDVI)
         resultado_indice = calcular_todos_los_indices(imagen_base, datos.indice, datos.año)
-        
-        # 4. Ejecutar máscara de recorte perimetral
         resultado_recortado = resultado_indice.clip(region_ee)
 
-        # Determinar resolución espacial nativa según el satélite del año consultado para cuidar los metadatos
-        resolucion = 10 if datos.año >= 2015 else 30 # Sentinel-2 tiene 10 metros por píxel; Landsat tiene 30 metros.
+        resolucion = 10 if datos.año >= 2015 else 30 # Sentinel-2 es 10m, Landsat es 30m
 
-        # 5. Solicitar enlace directo de descarga al clúster de Google Earth Engine
         url_descarga = resultado_recortado.getDownloadURL({
             'scale': resolucion,
-            'crs': 'EPSG:4326',  # Formato WGS84 para compatibilidad universal en QGIS / ArcGIS
+            'crs': 'EPSG:4326',  # Formato WGS84 para QGIS / ArcGIS
             'region': region_ee,
             'format': 'GEO_TIFF'
         })
@@ -288,9 +289,10 @@ def descargar_tiff_zona(datos: ConsultaMapa):
             "download_url": url_descarga
         }
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        print(f"❌ Error al generar descarga TIFF: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
-# endpoint de fallback controlado para el despacho PNG científico (Si se requiere del backend)
+
 @app.get("/descargar-png")
 def descargar_png_estatico(indice: str, año: int, dist: str):
     return {
@@ -298,11 +300,11 @@ def descargar_png_estatico(indice: str, año: int, dist: str):
         "message": f"Petición de renderizado de imagen procesada para el distrito de {dist} en el índice {indice}."
     }
 
+
 # ==============================================================================
 # --- 6. SERVICIO DE ARCHIVOS ESTÁTICOS (FRONTEND INTEGRADO) ---
 # ==============================================================================
 
-# Ruta raíz "/" que despacha directamente tu diseño visual
 @app.get("/", response_class=HTMLResponse)
 def read_root():
     if os.path.exists("index.html"):
@@ -317,7 +319,5 @@ def read_root():
         </body>
     </html>
     """
-
-# Montar los archivos estáticos para que busque el css/js/app.js en la raíz.
 # Al estar al final, FastAPI solo usará esta ruta si la petición no coincide con las rutas de arriba.
 app.mount("/", StaticFiles(directory=".", html=True), name="static")
