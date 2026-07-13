@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from typing import Dict, Any
 import ee
 import os
+import json
 
 app = FastAPI()
 
@@ -17,18 +18,49 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Inicialización segura de Google Earth Engine
+# --- INICIALIZACIÓN SEGURA Y AUTOMÁTICA DE GOOGLE EARTH ENGINE ---
 try:
-    ee.Initialize(project='ee-tesistambopata1')
-    print("✔ Google Earth Engine conectado con éxito y listo para teledetección.")
+    # 1. Buscamos primero si las credenciales están configuradas como variable de entorno (Para Render, Koyeb o Hugging Face)
+    gee_json_env = os.environ.get("GEE_JSON")
+    
+    if gee_json_env:
+        # Si la variable de entorno existe, cargamos las credenciales desde ahí
+        info_credenciales = json.loads(gee_json_env)
+        credentials = ee.ServiceAccountCredentials(
+            info_credenciales['client_email'], 
+            key_data=json.dumps(info_credenciales)
+        )
+        ee.Initialize(credentials, project='ee-tesistambopata1')
+        print("✔ GEE conectado en producción usando variables de entorno.")
+        
+    else:
+        # 2. Si no hay variable de entorno (desarrollo local), intentamos cargar el archivo JSON físico
+        # CAMBIA ESTE NOMBRE por el de tu JSON descargado si es diferente:
+        ruta_json_local = "ee-tesistambopata1-ecf622e54bef.json" 
+        
+        if os.path.exists(ruta_json_local):
+            credentials = ee.ServiceAccountCredentials.from_json_keyfile(ruta_json_local)
+            ee.Initialize(credentials, project='ee-tesistambopata1')
+            print(f"✔ GEE conectado de forma local usando el archivo: {ruta_json_local}")
+        else:
+            # 3. Fallback por si ejecutas en tu propia PC y ya estás logueado en la terminal
+            ee.Initialize(project='ee-tesistambopata1')
+            print("✔ GEE conectado usando credenciales por defecto del sistema.")
+
 except Exception as e:
-    print("❌ Error crítico al conectar con Earth Engine:", e)
+    print("❌ Error crítico de conexión con Earth Engine:", e)
+
 
 # Esquema estricto de entrada de datos desde el Frontend (app.js)
 class ConsultaMapa(BaseModel):
     indice: str
     año: int
     geometria: Dict[str, Any]
+
+# ==============================================================================
+# El resto de tu código (obtener_imagen_por_año, calcular_todos_los_indices, 
+# obtener_paleta_y_rangos, y los endpoints de FastAPI) permanece exactamente IGUAL.
+# ==============================================================================
 
 # --- 1. PROCESADOR Y FILTRADOR DE COLECCIONES SATELITALES (NUBOSIDAD INTERNA AL 40%) ---
 def obtener_imagen_por_año(año, region_ee):
