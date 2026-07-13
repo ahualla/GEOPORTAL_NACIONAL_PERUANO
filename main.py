@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator
-from typing import Dict, Any, Union  # <-- IMPORTACIÓN CORREGIDA (Agregado Any y Union)
+from typing import Dict, Any, Union
 import ee
 import os
 import json
@@ -191,16 +191,36 @@ def obtener_paleta_y_rangos(indice_nombre):
 @app.post("/calcular-indice-zona")
 def procesar_mapa_zona(datos: ConsultaMapa):
     try:
-        if not ee.data._credentials:
-             raise Exception("Earth Engine no está inicializado. Verifica las credenciales.")
-
-        # Usamos .año (que lee la propiedad limpia del validador)
+        # CORREGIDO: Se eliminó la validación obsoleta de 'ee.data._credentials' que causaba la falla
         año_limpio = datos.año
         region_ee = ee.Geometry(datos.geometria, 'EPSG:4326')
         
         imagen_base = obtener_imagen_por_año(año_limpio, region_ee)
         resultado_indice = calcular_todos_los_indices(imagen_base, datos.indice, año_limpio)
         resultado_recortado = resultado_indice.clip(region_ee)
+        
+        # --- CÓMPUTO REAL DE ESTADÍSTICAS PARA LAS TARJETAS FRONTILES ---
+        # Calculamos el área aproximada de la región de interés
+        area_m2 = region_ee.area(maxError=1).getInfo()
+        area_km2 = round(area_m2 / 1000000.0, 2)
+        
+        # Reducción espacial del índice recortado para extraer medias, máximos y mínimos
+        estadisticas = resultado_recortado.reduceRegion(
+            reducer=ee.Reducer.mean().combine(
+                reducer2=ee.Reducer.max(), sharedInputs=True
+            ).combine(
+                reducer2=ee.Reducer.min(), sharedInputs=True
+            ),
+            geometry=region_ee,
+            scale=30 if año_limpio < 2015 else 10,
+            maxPixels=1e9
+        ).getInfo()
+        
+        # Parseo de nombres de banda dinámicos arrojados por GEE
+        nombre_banda = datos.indice.upper()
+        val_prom = round(estadisticas.get(f"{nombre_banda}_mean") or 0.0, 3)
+        val_max = round(estadisticas.get(f"{nombre_banda}_max") or 0.0, 3)
+        val_min = round(estadisticas.get(f"{nombre_banda}_min") or 0.0, 3)
         
         paleta, min_val, max_val = obtener_paleta_y_rangos(datos.indice)
         
@@ -212,9 +232,13 @@ def procesar_mapa_zona(datos: ConsultaMapa):
         
         return {
             "status": "success",
-            "indice": datos.indice.upper(),
+            "indice": nombre_banda,
             "año": año_limpio,
-            "tile_url": map_id_dict['tile_fetcher'].url_format
+            "tile_url": map_id_dict['tile_fetcher'].url_format,
+            "area_km2": area_km2,
+            "val_prom": f"{val_prom:.3f}",
+            "val_max": f"{val_max:.3f}",
+            "val_min": f"{val_min:.3f}"
         }
         
     except Exception as e:
@@ -226,9 +250,7 @@ def procesar_mapa_zona(datos: ConsultaMapa):
 @app.post("/descargar-tiff")
 def descargar_tiff_zona(datos: ConsultaMapa):
     try:
-        if not ee.data._credentials:
-             raise Exception("Earth Engine no está inicializado.")
-
+        # CORREGIDO: Se eliminó la validación obsoleta de 'ee.data._credentials'
         año_limpio = datos.año
         region_ee = ee.Geometry(datos.geometria, 'EPSG:4326')
         imagen_base = obtener_imagen_por_año(año_limpio, region_ee)
