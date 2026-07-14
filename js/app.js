@@ -8,74 +8,58 @@
         ID CANAL: UCisFhGgE5XmibX07QTUFhaA
 =======================================================================*/
 
-/*==========================
-    MAPA LEAFLET
-==========================*/
-
+/*=========================================
+    1. INICIALIZACIÓN DEL MAPA LEAFLET
+=========================================*/
 const map = L.map('map').setView([-9.19, -75.0152], 6);
 
-// Capa base estándar internacional
+// Capa base estándar (OpenStreetMap)
 const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
 }).addTo(map);
 
-// Capa global para el polígono GeoJSON dinámico
-let capaGeoJson;
-// Marcador global informativo
-let marker;
+let capaGeoJson; // Capa para dibujar el polígono seleccionado
+let marker;      // Marcador informativo flotante
 
-/*==========================
-    ELEMENTOS DOM
-==========================*/
+/*=========================================
+    2. CAPTURA DE ELEMENTOS DEL DOM
+=========================================*/
+const tipoConsulta    = document.getElementById("tipoConsulta");
+const grupoAmbiental  = document.getElementById("grupoAmbiental");
+const capaAmbiental   = document.getElementById("capaAmbiental");
+const nombreArea      = document.getElementById("nombreArea");
 
-// Selectores de Tipo de Consulta y Áreas Ambientales
-const tipoConsulta = document.getElementById("tipoConsulta");
-const grupoAmbiental = document.getElementById("grupoAmbiental");
-const capaAmbiental = document.getElementById("capaAmbiental");
-const nombreArea = document.getElementById("nombreArea");
+const departamento    = document.getElementById("departamento");
+const provincia       = document.getElementById("provincia");
+const distrito        = document.getElementById("distrito");
+const grupoPolitico   = document.getElementById("grupoPolitico");
 
-// Selectores políticos tradicionales
-const departamento = document.getElementById("departamento");
-const provincia = document.getElementById("provincia");
-const distrito = document.getElementById("distrito");
-const grupoPolitico = document.getElementById("grupoPolitico");
+const anioInicio      = document.getElementById("anioInicio");
+const anioFinal       = document.getElementById("anioFinal");
+const satelite        = document.getElementById("satelite");
+const indice          = document.getElementById("indice");
+const objetivo        = document.getElementById("objetivo");
 
-const anioInicio = document.getElementById("anioInicio");
-const anioFinal = document.getElementById("anioFinal");
+const btnConsultar    = document.getElementById("consultar");
+const btnLimpiar      = document.getElementById("limpiar");
 
-const satelite = document.getElementById("satelite");
-const indice = document.getElementById("indice");
-const objetivo = document.getElementById("objetivo");
+// Paneles de información rápida
+const indiceNombre    = document.getElementById("indiceNombre");
+const sensor          = document.getElementById("sensor");
+const anio            = document.getElementById("anio");
 
-const btnConsultar = document.getElementById("consultar");
-const btnLimpiar = document.getElementById("limpiar");
+// Tabla de historial de consultas
+const tabla           = document.getElementById("tablaResultados");
 
-/*==========================
-    INFO PANEL
-==========================*/
+// Tarjetas de resultados (Compatibilidad de selectores ID / Clases)
+const areaTotal       = document.getElementById("resArea") || document.querySelector(".result-card:nth-child(1) h1");
+const valorProm       = document.getElementById("resProm") || document.querySelector(".result-card:nth-child(2) h1");
+const valorMax        = document.getElementById("resMax") || document.querySelector(".result-card:nth-child(3) h1");
+const valorMin        = document.getElementById("resMin") || document.querySelector(".result-card:nth-child(4) h1");
 
-const indiceNombre = document.getElementById("indiceNombre");
-const sensor = document.getElementById("sensor");
-const anio = document.getElementById("anio");
-
-/*==========================
-    TABLA
-==========================*/
-
-const tabla = document.getElementById("tablaResultados");
-
-/*==========================
-    RESULTADOS CARDS (CON DOBLE COMPATIBILIDAD DE ID Y CLASE)
-==========================*/
-
-const areaTotal = document.getElementById("resArea") || document.querySelector(".result-card:nth-child(1) h1");
-const valorProm = document.getElementById("resProm") || document.querySelector(".result-card:nth-child(2) h1");
-const valorMax = document.getElementById("resMax") || document.querySelector(".result-card:nth-child(3) h1");
-const valorMin = document.getElementById("resMin") || document.querySelector(".result-card:nth-child(4) h1");
-
-/*=======================================================================
-    RELACIÓN CIENTÍFICA: OBJETIVOS -> ÍNDICES ESPECTRALES
-=======================================================================*/
+/*=========================================
+    3. CONSTANTES Y MATRICES CIENTÍFICAS
+=========================================*/
 const indicesPorObjetivo = {
     "Vegetación": ["NDVI", "EVI", "SAVI", "MSAVI", "GNDVI", "GCI", "ARVI", "NDRE"],
     "Agua": ["NDWI", "MNDWI", "NDMI", "LSWI"],
@@ -86,9 +70,6 @@ const indicesPorObjetivo = {
     "Incendios y Antropización": ["NBR", "CRI"]
 };
 
-/*=======================================================================
-    VALIDACIÓN CIENTÍFICA DE TEMPORALIDAD POR SATÉLITE
-=======================================================================*/
 const limitesSatelites = {
     "Landsat 5": { min: 1984, max: 2011, def: 2010 },
     "Landsat 7": { min: 1999, max: 2021, def: 2015 },
@@ -97,15 +78,11 @@ const limitesSatelites = {
     "Sentinel 2": { min: 2015, max: 2026, def: 2022 }
 };
 
-/*=======================================================================
-    SISTEMA DE ENLACE DE BACKEND (URL DE RENDER)
-=======================================================================*/
 const BASE_URL_API_REAL = "https://geovisor-uwu.onrender.com";
 
-/*==========================
-    INICIALIZACIÓN
-==========================*/
-
+/*=========================================
+    4. EVENTO AL CARGAR LA PÁGINA (onload)
+=========================================*/
 window.onload = () => {
     try {
         cargarDepartamentosReal(); 
@@ -113,11 +90,11 @@ window.onload = () => {
         validarYFiltrarAniosPorSatelite(); 
         escucharCambiosTipoConsulta(); 
         
-        // ⚡ OPTIMIZACIÓN BRUTAL: Despertar el servidor gratuito en segundo plano de inmediato
-        fetch(`${BASE_URL_API_REAL}/`).catch(() => console.log("Despertando backend..."));
+        // ⚡ DESPERTAR SERVIDOR EN SEGUNDO PLANO (Evita retrasos en la primera consulta)
+        fetch(`${BASE_URL_API_REAL}/`).catch(() => console.log("Despertando servidor Render..."));
 
     } catch (error) {
-        console.error("⚠️ Error controlado en inicialización de recursos:", error);
+        console.error("⚠️ Error en inicialización:", error);
     } finally {
         const loader = document.getElementById("loader");
         if (loader) {
@@ -125,15 +102,12 @@ window.onload = () => {
             setTimeout(() => { loader.style.display = "none"; }, 500);
         }
     }
-
     setTimeout(() => { map.invalidateSize(); }, 400); 
-    console.log("GeoSpatial Perú inicializado correctamente. Desarrollado por Alessandro Alonso Ahualla Molina.");
 };
 
-/*==================================================
-    INTERFAZ DINÁMICA (POLÍTICO VS AMBIENTAL)
-==================================================*/
-
+/*=========================================
+    5. CONTROLADORES DE INTERFAZ DINÁMICA
+=========================================*/
 function escucharCambiosTipoConsulta() {
     if (tipoConsulta) {
         tipoConsulta.addEventListener("change", () => {
@@ -148,7 +122,6 @@ function escucharCambiosTipoConsulta() {
             }
         });
     }
-
     if (capaAmbiental) {
         capaAmbiental.addEventListener("change", actualizarAreasEspecificas);
     }
@@ -160,10 +133,9 @@ function deshabilitarUbigeo(deshabilitar) {
     if (distrito) distrito.disabled = deshabilitar;
 }
 
-// Escáner Híbrido Unificador: Rutas corregidas para archivos sueltos en raíz
+// Carga unificada de Áreas Naturales Protegidas sin trabar el navegador
 async function actualizarAreasEspecificas() {
     if (!capaAmbiental || !nombreArea) return;
-    
     const capa = capaAmbiental.value;
     nombreArea.innerHTML = "";
     
@@ -174,7 +146,7 @@ async function actualizarAreasEspecificas() {
     }
     
     nombreArea.disabled = true;
-    nombreArea.innerHTML = '<option value="Seleccione...">Mapeando y unificando registros espaciales...</option>';
+    nombreArea.innerHTML = '<option value="Seleccione...">Procesando capas...</option>';
     
     let archivosAPescar = [];
     if (capa === "acp") archivosAPescar = ["acp.geojson"];
@@ -188,10 +160,7 @@ async function actualizarAreasEspecificas() {
 
         for (const url of archivosAPescar) {
             const response = await fetch(url);
-            if (!response.ok) {
-                console.warn(`No se pudo leer el archivo suelto: ${url}`);
-                continue;
-            }
+            if (!response.ok) continue;
             
             const geojsonData = await response.json();
             
@@ -200,14 +169,10 @@ async function actualizarAreasEspecificas() {
                 
                 const props = f.properties;
                 const llaves = Object.keys(props);
-                
                 let nombrePuro = "";
+                
                 const llaveNombre = llaves.find(k => 
-                    k.toLowerCase() === "anp_nomb" || 
-                    k.toLowerCase() === "za_nomb" || 
-                    k.toLowerCase() === "acr_nomb" || 
-                    k.toLowerCase() === "nombre" ||
-                    k.toLowerCase() === "name"
+                    ["anp_nomb", "za_nomb", "acr_nomb", "nombre", "name"].includes(k.toLowerCase())
                 );
                 
                 if (llaveNombre && props[llaveNombre]) {
@@ -232,14 +197,10 @@ async function actualizarAreasEspecificas() {
                 }
                 
                 textoVisual += nombrePuro.toUpperCase();
-
-                if (ubicacion) {
-                    textoVisual += ` - ${ubicacion.toString().trim().toUpperCase()}`;
-                }
+                if (ubicacion) textoVisual += ` - ${ubicacion.toString().trim().toUpperCase()}`;
 
                 if (mapaItems.has(nombrePuro)) {
-                    let existente = mapaItems.get(nombrePuro);
-                    existente.partes += 1;
+                    mapaItems.get(nombrePuro).partes += 1;
                 } else {
                     mapaItems.set(nombrePuro, { etiqueta: textoVisual, partes: 1 });
                 }
@@ -251,11 +212,11 @@ async function actualizarAreasEspecificas() {
         );
 
         if (itemsOrdenados.length === 0) {
-            nombreArea.innerHTML = '<option value="Seleccione...">No se hallaron registros válidos</option>';
+            nombreArea.innerHTML = '<option value="Seleccione...">No se hallaron registros</option>';
             return;
         }
 
-        nombreArea.innerHTML = '<option value="Seleccione...">Seleccione un área de estudio...</option>';
+        nombreArea.innerHTML = '<option value="Seleccione...">Seleccione un área...</option>';
         itemsOrdenados.forEach(([nombreReal, info]) => {
             let opt = document.createElement("option");
             opt.value = nombreReal;
@@ -266,23 +227,15 @@ async function actualizarAreasEspecificas() {
         nombreArea.disabled = false;
 
     } catch (error) {
-        console.error("❌ Error grave en la carga unificada:", error);
+        console.error("❌ Error cargando áreas:", error);
         nombreArea.innerHTML = '<option value="Seleccione...">Error al mapear capas</option>';
     }
 }
 
-/*==================================================
-    LÓGICA DINÁMICA DE ÍNDICES ESPECTRALES
-==================================================*/
-
 function actualizarIndicesPorObjetivo() {
     if (!objetivo || !indice) return;
-    const objSeleccionado = objetivo.value;
-    const listaIndices = indicesPorObjetivo[objSeleccionado] || [];
-
     indice.innerHTML = "";
-
-    listaIndices.forEach(ind => {
+    (indicesPorObjetivo[objetivo.value] || []).forEach(ind => {
         let opt = document.createElement("option");
         opt.value = ind;
         opt.textContent = ind;
@@ -290,21 +243,13 @@ function actualizarIndicesPorObjetivo() {
     });
 }
 
-if (objetivo) {
-    objetivo.addEventListener("change", actualizarIndicesPorObjetivo);
-}
-
-/*==================================================
-    FILTRADO DINÁMICO DE AÑOS OPERATIVOS REALES
-==================================================*/
+if (objetivo) objetivo.addEventListener("change", actualizarIndicesPorObjetivo);
 
 function validarYFiltrarAniosPorSatelite() {
     if (!satelite || !anioInicio || !anioFinal) return;
-    const satSeleccionado = satelite.value;
-    const rango = limitesSatelites[satSeleccionado] || { min: 1985, max: 2026, def: 2020 };
-
-    const valorPrevioIni = parseInt(anioInicio.value);
-    const valorPrevioFin = parseInt(anioFinal.value);
+    const rango = limitesSatelites[satelite.value] || { min: 1985, max: 2026, def: 2020 };
+    const vIni = parseInt(anioInicio.value);
+    const vFin = parseInt(anioFinal.value);
 
     anioInicio.innerHTML = "";
     anioFinal.innerHTML = "";
@@ -313,141 +258,100 @@ function validarYFiltrarAniosPorSatelite() {
         let opt1 = document.createElement("option");
         opt1.value = i;
         opt1.textContent = i;
-        
-        let opt2 = opt1.cloneNode(true);
         anioInicio.appendChild(opt1);
-        anioFinal.appendChild(opt2);
+        anioFinal.appendChild(opt1.cloneNode(true));
     }
 
-    if (valorPrevioIni >= rango.min && valorPrevioIni <= rango.max) {
-        anioInicio.value = valorPrevioIni;
-    } else {
-        anioInicio.value = rango.def;
-    }
-
-    if (valorPrevioFin >= rango.min && valorPrevioFin <= rango.max) {
-        anioFinal.value = valorPrevioFin;
-    } else {
-        anioFinal.value = rango.def;
-    }
+    anioInicio.value = (vIni >= rango.min && vIni <= rango.max) ? vIni : rango.def;
+    anioFinal.value = (vFin >= rango.min && vFin <= rango.max) ? vFin : rango.def;
 }
 
-if (satelite) {
-    satelite.addEventListener("change", validarYFiltrarAniosPorSatelite);
-}
+if (satelite) satelite.addEventListener("change", validarYFiltrarAniosPorSatelite);
 
-/*==================================================
-    LÓGICA DE UBIGEO REAL Y DINÁMICO
-==================================================*/
-
+/*=========================================
+    6. UBIGEO REAL PERUANO
+=========================================*/
 function cargarDepartamentosReal() {
-    if (!departamento) return;
-    if (typeof dataUbigeo !== 'undefined') {
-        departamento.innerHTML = '<option value="Seleccione...">Seleccione...</option>';
-        Object.keys(dataUbigeo).forEach(dep => {
-            let opt = document.createElement("option");
-            opt.value = dep;
-            opt.textContent = dep;
-            departamento.appendChild(opt);
-        });
-    } else {
-        console.error("Error: 'dataUbigeo' no está definido.");
-    }
+    if (!departamento || typeof dataUbigeo === 'undefined') return;
+    departamento.innerHTML = '<option value="Seleccione...">Seleccione...</option>';
+    Object.keys(dataUbigeo).forEach(dep => {
+        let opt = document.createElement("option");
+        opt.value = dep;
+        opt.textContent = dep;
+        departamento.appendChild(opt);
+    });
 }
 
 if (departamento) {
     departamento.addEventListener('change', () => {
-        const depSeleccionado = departamento.value;
         provincia.innerHTML = '<option value="Seleccione...">Seleccione...</option>';
         distrito.innerHTML = '<option value="Seleccione...">Seleccione...</option>';
-
-        if (depSeleccionado && depSeleccionado !== "Seleccione..." && typeof dataUbigeo !== 'undefined') {
-            const provincias = dataUbigeo[depSeleccionado];
-            if (provincias) {
-                Object.keys(provincias).forEach(prov => {
-                    let opt = document.createElement("option");
-                    opt.value = prov;
-                    opt.textContent = prov;
-                    provincia.appendChild(opt);
-                });
-            }
+        if (departamento.value !== "Seleccione..." && typeof dataUbigeo !== 'undefined') {
+            Object.keys(dataUbigeo[departamento.value] || {}).forEach(prov => {
+                let opt = document.createElement("option");
+                opt.value = prov;
+                opt.textContent = prov;
+                provincia.appendChild(opt);
+            });
         }
     });
 }
 
 if (provincia) {
     provincia.addEventListener('change', () => {
-        const depSeleccionado = departamento.value;
-        const provSeleccionada = provincia.value;
         distrito.innerHTML = '<option value="Seleccione...">Seleccione...</option>';
-
-        if (provSeleccionada && provSeleccionada !== "Seleccione..." && typeof dataUbigeo !== 'undefined') {
-            const distritos = dataUbigeo[depSeleccionado]?.[provSeleccionada];
-            if (distritos) {
-                distritos.forEach(dist => {
-                    let opt = document.createElement("option");
-                    opt.value = dist;
-                    opt.textContent = dist;
-                    distrito.appendChild(opt);
-                });
-            }
+        if (provincia.value !== "Seleccione..." && typeof dataUbigeo !== 'undefined') {
+            (dataUbigeo[departamento.value]?.[provincia.value] || []).forEach(dist => {
+                let opt = document.createElement("option");
+                opt.value = dist;
+                opt.textContent = dist;
+                distrito.appendChild(opt);
+            });
         }
     });
 }
 
-/*==================================================
-    FUSIÓN GEOMÉTRICA DE COORDENADAS (MultiPolygon)
-==================================================*/
+/*=========================================
+    7. UNIFICADOR MULTIPOLYGON (SOPORTE GIS)
+=========================================*/
 function fusionarGeometrias(features) {
-    if (features.length === 1) {
-        return features[0].geometry;
-    }
+    if (features.length === 1) return features[0].geometry;
     let coordinates = [];
     features.forEach(f => {
-        const geom = f.geometry;
-        if (geom.type === "Polygon") {
-            coordinates.push(geom.coordinates);
-        } else if (geom.type === "MultiPolygon") {
-            coordinates = coordinates.concat(geom.coordinates);
-        }
+        if (f.geometry.type === "Polygon") coordinates.push(f.geometry.coordinates);
+        else if (f.geometry.type === "MultiPolygon") coordinates = coordinates.concat(f.geometry.coordinates);
     });
-    return {
-        type: "MultiPolygon",
-        coordinates: coordinates
-    };
+    return { type: "MultiPolygon", coordinates: coordinates };
 }
 
-/*==========================
-    EVENTO CONSULTAR
-==========================*/
-
+/*=========================================
+    8. EVENTO CENTRAL DE CONSULTA (PRO)
+=========================================*/
 let capaSatelitalGEE = null;
 let ultimaGeometriaConsultada = null;
 
 if (btnConsultar) {
     btnConsultar.addEventListener("click", async () => {
         const isAmbiental = tipoConsulta && tipoConsulta.value === "conservacion";
-        const dep = departamento ? departamento.value : "Seleccione...";
-        const prov = provincia ? provincia.value : "Seleccione...";
-        const dist = distrito ? distrito.value : "Seleccione...";
-        const ind = indice ? indice.value : "";
-        const sat = satelite ? satelite.value : "";
-        const anioIni = anioInicio ? anioInicio.value : "";
-        const anioFin = anioFinal ? anioFinal.value : "";
-        
-        const capaAmb = capaAmbiental ? capaAmbiental.value : "";
-        const nomArea = nombreArea ? nombreArea.value : "";
+        const dep = departamento?.value || "Seleccione...";
+        const prov = provincia?.value || "Seleccione...";
+        const dist = distrito?.value || "Seleccione...";
+        const ind = indice?.value || "";
+        const sat = satelite?.value || "";
+        const anioIni = anioInicio?.value || "";
+        const anioFin = anioFinal?.value || "";
+        const capaAmb = capaAmbiental?.value || "";
+        const nomArea = nombreArea?.value || "";
 
-        // Validaciones de fecha
         if (parseInt(anioIni) > parseInt(anioFin)) {
-            alert("Error de Periodo: El Año Inicial no puede ser mayor que el Año Final seleccionado.");
+            alert("Error: El Año Inicial no puede ser mayor que el Año Final.");
             return;
         }
 
         const loader = document.getElementById("loader");
         if (loader) loader.style.display = "flex";
 
-        // Limpieza inmediata de capas previas
+        // Limpieza de capas viejas
         if (capaGeoJson && map.hasLayer(capaGeoJson)) map.removeLayer(capaGeoJson);
         if (marker && map.hasLayer(marker)) map.removeLayer(marker);
         if (capaSatelitalGEE && map.hasLayer(capaSatelitalGEE)) map.removeLayer(capaSatelitalGEE);
@@ -458,8 +362,8 @@ if (btnConsultar) {
         let tituloPopup = "";
 
         if (isAmbiental) {
-            if (!capaAmb || capaAmb === "Seleccione..." || !nomArea || nomArea === "Seleccione...") {
-                alert("⚠️ Selecciona una categoría y un área ambiental de estudio.");
+            if (capaAmb === "Seleccione..." || nomArea === "Seleccione...") {
+                alert("⚠️ Selecciona una categoría y área de estudio ambiental.");
                 if (loader) loader.style.display = "none";
                 return;
             }
@@ -470,18 +374,15 @@ if (btnConsultar) {
             else if (capaAmb === "zona_de_amortiguamiento") archivosAPescar = ["zona_de_amortiguamiento1.geojson", "zona_de_amortiguamiento2.geojson"];
             
             valorFiltro = nomArea;
-            tituloPopup = `Área: ${nomArea.toUpperCase()} (${capaAmb.toUpperCase()})`;
+            tituloPopup = `Área: ${nomArea.toUpperCase()}`;
         } else {
-            if (!dep || dep === "Seleccione...") {
-                alert("Selecciona al menos un departamento para inicializar la consulta cartográfica.");
+            if (dep === "Seleccione...") {
+                alert("Selecciona al menos un departamento para iniciar.");
                 if (loader) loader.style.display = "none";
                 return;
             }
             if (dist && dist !== "Seleccione...") {
-                archivosAPescar = [
-                    "distrito1.geojson", "distrito2.geojson", "distrito3.geojson",
-                    "distrito4.geojson", "distrito5.geojson", "distrito6.geojson", "distrito7.geojson"
-                ];
+                archivosAPescar = ["distrito1.geojson", "distrito2.geojson", "distrito3.geojson", "distrito4.geojson", "distrito5.geojson", "distrito6.geojson", "distrito7.geojson"];
                 propiedadFiltro = "DISTRITO";
                 valorFiltro = dist;
                 tituloPopup = `Distrito: ${dist}`;
@@ -498,10 +399,7 @@ if (btnConsultar) {
             }
         }
 
-        const normalizarTexto = (str) => {
-            if (!str) return "";
-            return str.toString().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
-        };
+        const normalizarTexto = str => !str ? "" : str.toString().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
 
         try {
             let featuresFiltrados = [];
@@ -511,113 +409,75 @@ if (btnConsultar) {
             for (const url of archivosAPescar) {
                 const response = await fetch(url);
                 if (!response.ok) continue;
-
                 const geojsonData = await response.json();
 
-                const filtradosEnParte = geojsonData.features.filter(f => {
+                const filtrados = geojsonData.features.filter(f => {
                     if (!f.properties) return false;
-
                     if (isAmbiental) {
                         const props = f.properties;
                         const llaves = Object.keys(props);
-                        const llaveNombre = llaves.find(k => 
-                            k.toLowerCase() === "anp_nomb" || 
-                            k.toLowerCase() === "za_nomb" || 
-                            k.toLowerCase() === "acr_nomb" || 
-                            k.toLowerCase() === "nombre" ||
-                            k.toLowerCase() === "name"
-                        );
-                        let nombreProp = "";
-                        if (llaveNombre && props[llaveNombre]) {
-                            nombreProp = props[llaveNombre].toString();
-                        } else {
-                            const fallbackLlave = llaves.find(k => k.toLowerCase().includes("nomb"));
-                            if (fallbackLlave && props[fallbackLlave]) {
-                                nombreProp = props[fallbackLlave].toString();
-                            }
-                        }
+                        const llaveNombre = llaves.find(k => ["anp_nomb", "za_nomb", "acr_nomb", "nombre", "name"].includes(k.toLowerCase()));
+                        let nombreProp = llaveNombre ? props[llaveNombre] : (llaves.find(k => k.toLowerCase().includes("nomb")) ? props[llaves.find(k => k.toLowerCase().includes("nomb"))] : "");
                         return normalizarTexto(nombreProp) === valorBuscadoNormalizado;
                     } else {
-                        let propLugar = f.properties[propiedadFiltro] || 
-                                        f.properties[propiedadFiltro.substring(0, 9)] || 
-                                        f.properties[`NOM_${propiedadFiltro.substring(0, 4)}`] || 
-                                        f.properties[`NOMB${propiedadFiltro.substring(0, 3)}`] || 
-                                        f.properties["NOM_CAP"] || "";
-
-                        let propDep = f.properties["DEPARTAMEN"] || 
-                                      f.properties["DEPARTAMENTO"] || 
-                                      f.properties["NOM_DEP"] || 
-                                      f.properties["NOMDEP"] || "";
-
-                        const textoPropiedad = normalizarTexto(propLugar);
-                        const textoDepartamento = normalizarTexto(propDep);
-
+                        let propLugar = f.properties[propiedadFiltro] || f.properties[propiedadFiltro.substring(0, 9)] || f.properties["NOM_CAP"] || "";
+                        let propDep = f.properties["DEPARTAMENTO"] || f.properties["DEPARTAMEN"] || f.properties["NOM_DEP"] || "";
                         if (propiedadFiltro === "DEPARTAMENTO") {
-                            return textoPropiedad === valorBuscadoNormalizado || textoDepartamento === depBuscadoNormalizado;
+                            return normalizarTexto(propLugar) === valorBuscadoNormalizado || normalizarTexto(propDep) === depBuscadoNormalizado;
                         }
-                        return textoPropiedad === valorBuscadoNormalizado && textoDepartamento === depBuscadoNormalizado;
+                        return normalizarTexto(propLugar) === valorBuscadoNormalizado && normalizarTexto(propDep) === depBuscadoNormalizado;
                     }
                 });
-
-                if (filtradosEnParte.length > 0) {
-                    featuresFiltrados = featuresFiltrados.concat(filtradosEnParte);
-                }
+                if (filtrados.length > 0) featuresFiltrados = featuresFiltrados.concat(filtrados);
             }
 
             if (featuresFiltrados.length === 0) {
-                alert(`Límites geométricos no encontrados para: ${valorFiltro}. Verifica tus archivos GeoJSON.`);
+                alert(`Geometría no encontrada para: ${valorFiltro}.`);
                 if (loader) loader.style.display = "none";
                 return;
             }
 
+            //  CORREGIDO: Nombre unificado en español para evitar el ReferenceError
             const geometriaUnificada = fusionarGeometrias(featuresFiltrados);
 
             const geojsonFiltrado = { 
                 type: "FeatureCollection", 
-                features: [{ 
-                    type: "Feature", 
-                    geometry: geometriaUnificada, 
-                    properties: { name: valorFiltro } 
-                }] 
+                features: [{ type: "Feature", geometry: geometriaUnificada, properties: { name: valorFiltro } }] 
             };
 
             const estiloPoligono = isAmbiental ? 
-                { color: "#27ae60", weight: 3, opacity: 0.9, fillColor: "#2ecc71", fillOpacity: 0.15 } : 
-                { color: "#e74c3c", weight: 3, opacity: 0.9, fillColor: "#f1c40f", fillOpacity: 0.15 };
+                { color: "#27ae60", weight: 3, opacity: 0.9, fillColor: "#2ecc71", fillOpacity: 0.12 } : 
+                { color: "#e74c3c", weight: 3, opacity: 0.9, fillColor: "#f1c40f", fillOpacity: 0.12 };
 
-            // ⚡ OPTIMIZACIÓN EN ACCIÓN: Renderizar el polígono local al instante en el mapa
+            // Dibujar instantáneamente los límites del mapa
             capaGeoJson = L.geoJSON(geojsonFiltrado, { style: estiloPoligono }).addTo(map);
             const limites = capaGeoJson.getBounds();
 
             if (limites.isValid()) {
                 map.fitBounds(limites);
                 const centro = limites.getCenter();
-                const indicadorSectores = featuresFiltrados.length > 1 ? 
-                    `<br><span style="color:#27ae60; font-weight:bold;">⚠️ Unificados ${featuresFiltrados.length} sectores espaciales</span>` : "";
-                
-                let popText = isAmbiental ? 
-                    `<b>${tituloPopup}</b>${indicadorSectores}<br><b>Índice:</b> ${ind}<br><b>Satélite:</b> ${sat}` : 
-                    `<b>${tituloPopup}</b><br>Prov: ${prov}<br>Dist: ${dist}<br><b>Índice:</b> ${ind}`;
-                
+                let popText = `<b>${tituloPopup}</b><br><b>Índice:</b> ${ind}<br><b>Satélite:</b> ${sat}`;
                 marker = L.marker(centro).addTo(map).bindPopup(popText).openPopup();
             }
 
+            // Actualizar paneles visuales rápidamente
             if (indiceNombre) indiceNombre.textContent = ind;
             if (sensor) sensor.textContent = sat;
             if (anio) anio.textContent = anioIni === anioFin ? `${anioIni}` : `${anioIni} - ${anioFin}`;
 
+            // Guardamos la variable corregida
             ultimaGeometriaConsultada = geometriaUnificada;
 
-            // ⚡ Quitamos el loader general para que el mapa quede interactivo de inmediato
+            // Apagamos el loader global para que el mapa no se congele
             if (loader) loader.style.display = "none";
 
-            // Ponemos los recuadros de datos en estado de espera elegante
+            // Colocar las tarjetas en modo de carga interactiva
             if (areaTotal) areaTotal.textContent = "Calculando...";
             if (valorProm) valorProm.textContent = "⏳...";
             if (valorMax) valorMax.textContent = "⏳...";
             if (valorMin) valorMin.textContent = "⏳...";
 
-            // 🔥 CONSULTA ASÍNCRONA EN SEGUNDO PLANO (No bloquea la pantalla)
+            // 🔥 HILO ASÍNCRONO NO BLOQUEANTE: El motor de análisis trabaja en la sombra
             (async () => {
                 try {
                     const respuestaBackend = await fetch(`${BASE_URL_API_REAL}/calcular-indice-zona`, {
@@ -626,9 +486,14 @@ if (btnConsultar) {
                         body: JSON.stringify({
                             indice: ind,
                             año: parseInt(anioIni),
-                            geometria: geometriaUnificada
+                            geometria: geometriaUnificada //  CORREGIDO
                         })
                     });
+
+                    // Control de error de tamaño de payload (154MB de tu imagen)
+                    if (respuestaBackend.status === 413 || respuestaBackend.status === 502) {
+                        throw new Error("La geometría seleccionada es demasiado pesada. Por favor simplifica el GeoJSON.");
+                    }
 
                     const resultadoBackend = await respuestaBackend.json();
 
@@ -656,34 +521,33 @@ if (btnConsultar) {
                     }
                 } catch (err) {
                     console.error("Error asíncrono con GEE:", err);
+                    alert("⚠️ Error: Los límites del área seleccionada son extremadamente pesados para ser procesados por la API. Reduce el detalle de los GeoJSON.");
                     generarResultadosManejoFallas();
                 }
             })();
 
         } catch (error) {
-            console.error("Error en consulta cartográfica base:", error);
-            alert("Error de procesamiento con servidores locales.");
-            generarResultadosManejoFallas();
+            console.error("Error general:", error);
             if (loader) loader.style.display = "none";
+            generarResultadosManejoFallas();
         }
     });
 }
 
-/*==========================
-    PROCESADOR DE TABLA 
-==========================*/
-
+/*=========================================
+    9. HISTORIAL DE RESULTADOS (TABLA)
+=========================================*/
 function agregarTabla(dep, prov, dist, ind, anioIni, sat, areaKm2) {
     if (!tabla) return;
-    const nombreProvincia = (prov === 'Seleccione...' || !prov) ? 'No especificado' : prov;
-    const nombreDistrito = (dist === 'Seleccione...' || !dist) ? 'No especificado' : dist;
+    const nProv = (!prov || prov === 'Seleccione...') ? 'N/A' : prov;
+    const nDist = (!dist || dist === 'Seleccione...') ? 'N/A' : dist;
     
     const row = document.createElement("tr");
     row.innerHTML = `
         <td>${dep}</td>
-        <td>${nombreProvincia}</td>
-        <td>${nombreDistrito}</td>
-        <td>${ind}</td>
+        <td>${nProv}</td>
+        <td>${nDist}</td>
+        <td><b>${ind}</b></td>
         <td>${anioIni}</td>
         <td>${sat}</td>
         <td>${areaKm2} km²</td>
@@ -692,16 +556,15 @@ function agregarTabla(dep, prov, dist, ind, anioIni, sat, areaKm2) {
 }
 
 function generarResultadosManejoFallas() {
-    if (areaTotal) areaTotal.textContent = "N/A km²";
+    if (areaTotal) areaTotal.textContent = "Límite Excedido";
     if (valorProm) valorProm.textContent = "0.000";
     if (valorMax) valorMax.textContent = "0.000";
     if (valorMin) valorMin.textContent = "0.000";
 }
 
-/*==========================
-    LIMPIAR PANEL Y CAPAS
-==========================*/
-
+/*=========================================
+    10. BOTÓN LIMPIAR PANEL Y CAPAS
+=========================================*/
 if (btnLimpiar) {
     btnLimpiar.addEventListener("click", () => {
         if (tipoConsulta) tipoConsulta.value = "politico";
@@ -746,17 +609,16 @@ if (btnLimpiar) {
     });
 }
 
-/*==========================
-    GEOFOCALIZACIÓN Y FULLSCREEN
-==========================*/
-
+/*=========================================
+    11. GPS Y CONTROL FULLSCREEN
+=========================================*/
 const btnGps = document.querySelector(".toolbar-right button:nth-child(2)");
 if (btnGps) {
     btnGps.addEventListener("click", () => {
         map.locate({ setView: true, maxZoom: 10 });
         map.on("locationfound", e => {
             if (marker && map.hasLayer(marker)) map.removeLayer(marker);
-            marker = L.marker(e.latlng).addTo(map).bindPopup("Ubicación actual GPS").openPopup();
+            marker = L.marker(e.latlng).addTo(map).bindPopup("Ubicación GPS").openPopup();
         });
     });
 }
@@ -766,18 +628,14 @@ if (btnFullscreen) {
     btnFullscreen.addEventListener("click", () => {
         const elem = document.getElementById("map");
         if (!elem) return;
-        if (!document.fullscreenElement) {
-            elem.requestFullscreen();
-        } else {
-            document.exitFullscreen();
-        }
+        if (!document.fullscreenElement) elem.requestFullscreen();
+        else document.exitFullscreen();
     });
 }
 
-/*=======================================================================
-    SISTEMA DE DESCARGAS CIENTÍFICAS MEJORADO
-=======================================================================*/
-
+/*=========================================
+    12. EXPORTACIÓN DE RESULTADOS (PRO)
+=========================================*/
 const btnTiff = document.getElementById("btnTiff");
 const btnShp  = document.getElementById("btnShp");
 const btnPng  = document.getElementById("btnPng");
@@ -786,8 +644,7 @@ const btnPdf  = document.getElementById("btnPdf");
 if (btnTiff) {
     btnTiff.addEventListener("click", async (e) => {
         e.preventDefault();
-        if (!ultimaGeometriaConsultada) return alert("⚠️ No se detectó ninguna geometría activa procesada.");
-        
+        if (!ultimaGeometriaConsultada) return alert("⚠️ No hay geometría consultada activa.");
         const loader = document.getElementById("loader");
         if (loader) loader.style.display = "flex";
 
@@ -805,10 +662,10 @@ if (btnTiff) {
             if (data.status === "success" && data.download_url) {
                 window.location.href = data.download_url;
             } else {
-                alert("❌ Error: " + (data.detail || data.message || "No se pudo generar la descarga"));
+                alert("❌ Error generando descarga TIFF.");
             }
-        } catch (error) {
-            alert("❌ Error conectando con el backend.");
+        } catch {
+            alert("❌ Falló la conexión con el servidor.");
         } finally {
             if (loader) loader.style.display = "none";
         }
@@ -819,17 +676,11 @@ if (btnShp) {
     btnShp.addEventListener("click", (e) => {
         e.preventDefault();
         const isAmbiental = tipoConsulta && tipoConsulta.value === "conservacion";
-
-        if (!isAmbiental && (departamento.value === "Seleccione..." || !departamento.value)) {
-            return alert("⚠️ Realiza una consulta primero.");
-        }
-        if (isAmbiental && (capaAmbiental.value === "Seleccione..." || !nombreArea.value)) {
-            return alert("⚠️ Realiza una consulta primero.");
-        }
+        if (!isAmbiental && (departamento.value === "Seleccione..." || !departamento.value)) return alert("⚠️ Realiza una consulta primero.");
         
         const pDep = isAmbiental ? "Area Ambiental" : departamento.value;
-        const pProv = isAmbiental ? capaAmbiental.value.toUpperCase() : (provincia.value === "Seleccione..." ? "" : provincia.value);
-        const pDist = isAmbiental ? nombreArea.value : (distrito.value === "Seleccione..." ? "" : distrito.value);
+        const pProv = isAmbiental ? capaAmbiental.value.toUpperCase() : provincia.value;
+        const pDist = isAmbiental ? nombreArea.value : distrito.value;
 
         window.location.href = `${BASE_URL_API_REAL}/descargar-shp?dep=${pDep}&prov=${pProv}&dist=${pDist}`;
     });
@@ -840,21 +691,17 @@ if (btnPng) {
         e.preventDefault();
         const isAmbiental = tipoConsulta && tipoConsulta.value === "conservacion";
         if (!isAmbiental && departamento.value === "Seleccione...") return alert("⚠️ Realiza una consulta primero.");
-        if (isAmbiental && capaAmbiental.value === "Seleccione...") return alert("⚠️ Realiza una consulta primero.");
 
         const contenedorMapa = document.getElementById("map");
         if (typeof html2canvas !== "undefined" && contenedorMapa) {
             const loader = document.getElementById("loader");
             if (loader) loader.style.display = "flex";
-
             html2canvas(contenedorMapa, { useCORS: true }).then(canvas => {
                 const link = document.createElement("a");
                 link.download = `MAPA_${indice.value}_${anioInicio.value}.png`;
                 link.href = canvas.toDataURL("image/png");
                 link.click();
-            }).finally(() => {
-                if (loader) loader.style.display = "none";
-            });
+            }).finally(() => { if (loader) loader.style.display = "none"; });
         }
     });
 }
@@ -863,7 +710,6 @@ if (btnPdf) {
     btnPdf.addEventListener("click", async (e) => {
         e.preventDefault();
         if (!ultimaGeometriaConsultada) return alert("⚠️ No hay consulta activa.");
-        
         const loader = document.getElementById("loader");
         if (loader) loader.style.display = "flex";
 
@@ -890,10 +736,10 @@ if (btnPdf) {
                 link.download = `REPORTE_${indice.value}_${anioInicio.value}.pdf`;
                 link.click();
             } else {
-                alert("❌ El servidor reportó un error al estructurar el reporte PDF.");
+                alert("❌ Error generando PDF.");
             }
-        } catch (error) {
-            alert("❌ Error al descargar el reporte PDF.");
+        } catch {
+            alert("❌ Falló la descarga.");
         } finally {
             if (loader) loader.style.display = "none";
         }
