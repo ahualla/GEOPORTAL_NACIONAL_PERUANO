@@ -420,244 +420,247 @@ const BASE_URL_API_REAL = "https://geovisor-uwu.onrender.com";
 let capaSatelitalGEE = null;
 let ultimaGeometriaConsultada = null;
 
-btnConsultar.addEventListener("click", async () => {
-    const isAmbiental = tipoConsulta && tipoConsulta.value === "conservacion";
-    const dep = departamento.value;
-    const prov = provincia.value;
-    const dist = distrito.value;
-    const ind = indice.value;
-    const sat = satelite.value;
-    const anioIni = anioInicio.value;
-    const anioFin = anioFinal.value;
-    
-    const capaAmb = capaAmbiental ? capaAmbiental.value : "";
-    const nomArea = nombreArea ? nombreArea.value : "";
-
-    // Validaciones de fecha
-    if (parseInt(anioIni) > parseInt(anioFin)) {
-        alert("Error de Periodo: El Año Inicial no puede ser mayor que el Año Final seleccionado.");
-        return;
-    }
-
-    const loader = document.getElementById("loader");
-    if (loader) loader.style.display = "flex";
-
-    // Limpieza de capas previas
-    if (capaGeoJson && map.hasLayer(capaGeoJson)) map.removeLayer(capaGeoJson);
-    if (marker && map.hasLayer(marker)) map.removeLayer(marker);
-    if (capaSatelitalGEE && map.hasLayer(capaSatelitalGEE)) map.removeLayer(capaSatelitalGEE);
-
-    let archivosAPescar = [];
-    let propiedadFiltro = "";
-    let valorFiltro = "";
-    let tituloPopup = "";
-
-    if (isAmbiental) {
-        if (!capaAmb || capaAmb === "Seleccione..." || !nomArea || nomArea === "Seleccione...") {
-            alert("⚠️ Selecciona una categoría y un área ambiental de estudio.");
-            if (loader) loader.style.display = "none";
-            return;
-        }
-        if (capaAmb === "acp") archivosAPescar = ["acp.geojson"];
-        else if (capaAmb === "acr") archivosAPescar = ["acr.geojson"];
-        else if (capaAmb === "zona_reservada") archivosAPescar = ["zona_reservada.geojson"];
-        else if (capaAmb === "anpdefinitivas") archivosAPescar = ["anpdefinitivas.geojson"];
-        else if (capaAmb === "zona_de_amortiguamiento") archivosAPescar = ["zona_de_amortiguamiento1.geojson", "zona_de_amortiguamiento2.geojson"];
+if (btnConsultar) {
+    btnConsultar.addEventListener("click", async () => {
+        const isAmbiental = tipoConsulta && tipoConsulta.value === "conservacion";
+        const dep = departamento ? departamento.value : "Seleccione...";
+        const prov = provincia ? provincia.value : "Seleccione...";
+        const dist = distrito ? distrito.value : "Seleccione...";
+        const ind = indice ? indice.value : "";
+        const sat = satelite ? satelite.value : "";
+        const anioIni = anioInicio ? anioInicio.value : "";
+        const anioFin = anioFinal ? anioFinal.value : "";
         
-        valorFiltro = nomArea;
-        tituloPopup = `Área: ${nomArea.toUpperCase()} (${capaAmb.toUpperCase()})`;
-    } else {
-        if (!dep || dep === "Seleccione...") {
-            alert("Selecciona al menos un departamento para inicializar la consulta cartográfica.");
-            if (loader) loader.style.display = "none";
+        const capaAmb = capaAmbiental ? capaAmbiental.value : "";
+        const nomArea = nombreArea ? nombreArea.value : "";
+
+        // Validaciones de fecha
+        if (parseInt(anioIni) > parseInt(anioFin)) {
+            alert("Error de Periodo: El Año Inicial no puede ser mayor que el Año Final seleccionado.");
             return;
         }
-        if (dist && dist !== "Seleccione...") {
-            archivosAPescar = [
-                "distrito1.geojson", "distrito2.geojson", "distrito3.geojson",
-                "distrito4.geojson", "distrito5.geojson", "distrito6.geojson", "distrito7.geojson"
-            ];
-            propiedadFiltro = "DISTRITO";
-            valorFiltro = dist;
-            tituloPopup = `Distrito: ${dist}`;
-        } else if (prov && prov !== "Seleccione...") {
-            archivosAPescar = ["provincia1.geojson", "provincia2.geojson", "provincia3.geojson", "provincia4.geojson"];
-            propiedadFiltro = "PROVINCIA";
-            valorFiltro = prov;
-            tituloPopup = `Provincia: ${prov}`;
+
+        const loader = document.getElementById("loader");
+        if (loader) loader.style.display = "flex";
+
+        // Limpieza de capas previas
+        if (capaGeoJson && map.hasLayer(capaGeoJson)) map.removeLayer(capaGeoJson);
+        if (marker && map.hasLayer(marker)) map.removeLayer(marker);
+        if (capaSatelitalGEE && map.hasLayer(capaSatelitalGEE)) map.removeLayer(capaSatelitalGEE);
+
+        let archivosAPescar = [];
+        let propiedadFiltro = "";
+        let valorFiltro = "";
+        let tituloPopup = "";
+
+        if (isAmbiental) {
+            if (!capaAmb || capaAmb === "Seleccione..." || !nomArea || nomArea === "Seleccione...") {
+                alert("⚠️ Selecciona una categoría y un área ambiental de estudio.");
+                if (loader) loader.style.display = "none";
+                return;
+            }
+            if (capaAmb === "acp") archivosAPescar = ["acp.geojson"];
+            else if (capaAmb === "acr") archivosAPescar = ["acr.geojson"];
+            else if (capaAmb === "zona_reservada") archivosAPescar = ["zona_reservada.geojson"];
+            else if (capaAmb === "anpdefinitivas") archivosAPescar = ["anpdefinitivas.geojson"];
+            else if (capaAmb === "zona_de_amortiguamiento") archivosAPescar = ["zona_de_amortiguamiento1.geojson", "zona_de_amortiguamiento2.geojson"];
+            
+            valorFiltro = nomArea;
+            tituloPopup = `Área: ${nomArea.toUpperCase()} (${capaAmb.toUpperCase()})`;
         } else {
-            archivosAPescar = ["departamentos.geojson"];
-            propiedadFiltro = "DEPARTAMENTO";
-            valorFiltro = dep;
-            tituloPopup = `Departamento: ${dep}`;
-        }
-    }
-
-    const normalizarTexto = (str) => {
-        if (!str) return "";
-        return str.toString().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
-    };
-
-    try {
-        let featuresFiltrados = [];
-        const valorBuscadoNormalizado = normalizarTexto(valorFiltro);
-        const depBuscadoNormalizado = normalizarTexto(dep);
-
-        for (const url of archivosAPescar) {
-            const response = await fetch(url);
-            if (!response.ok) continue;
-
-            const geojsonData = await response.json();
-
-            const filtradosEnParte = geojsonData.features.filter(f => {
-                if (!f.properties) return false;
-
-                if (isAmbiental) {
-                    const props = f.properties;
-                    const llaves = Object.keys(props);
-                    const llaveNombre = llaves.find(k => 
-                        k.toLowerCase() === "anp_nomb" || 
-                        k.toLowerCase() === "za_nomb" || 
-                        k.toLowerCase() === "acr_nomb" || 
-                        k.toLowerCase() === "nombre" ||
-                        k.toLowerCase() === "name"
-                    );
-                    let nombreProp = "";
-                    if (llaveNombre && props[llaveNombre]) {
-                        nombreProp = props[llaveNombre].toString();
-                    } else {
-                        const fallbackLlave = llaves.find(k => k.toLowerCase().includes("nomb"));
-                        if (fallbackLlave && props[fallbackLlave]) {
-                            nombreProp = props[fallbackLlave].toString();
-                        }
-                    }
-                    return normalizarTexto(nombreProp) === valorBuscadoNormalizado;
-                } else {
-                    let propLugar = f.properties[propiedadFiltro] || 
-                                    f.properties[propiedadFiltro.substring(0, 9)] || 
-                                    f.properties[`NOM_${propiedadFiltro.substring(0, 4)}`] || 
-                                    f.properties[`NOMB${propiedadFiltro.substring(0, 3)}`] || 
-                                    f.properties["NOM_CAP"] || "";
-
-                    let propDep = f.properties["DEPARTAMEN"] || 
-                                  f.properties["DEPARTAMENTO"] || 
-                                  f.properties["NOM_DEP"] || 
-                                  f.properties["NOMDEP"] || "";
-
-                    const textoPropiedad = normalizarTexto(propLugar);
-                    const textoDepartamento = normalizarTexto(propDep);
-
-                    if (propiedadFiltro === "DEPARTAMENTO") {
-                        return textoPropiedad === valorBuscadoNormalizado || textoDepartamento === depBuscadoNormalizado;
-                    }
-                    return textoPropiedad === valorBuscadoNormalizado && textoDepartamento === depBuscadoNormalizado;
-                }
-            });
-
-            if (filtradosEnParte.length > 0) {
-                featuresFiltrados = featuresFiltrados.concat(filtradosEnParte);
+            if (!dep || dep === "Seleccione...") {
+                alert("Selecciona al menos un departamento para inicializar la consulta cartográfica.");
+                if (loader) loader.style.display = "none";
+                return;
+            }
+            if (dist && dist !== "Seleccione...") {
+                archivosAPescar = [
+                    "distrito1.geojson", "distrito2.geojson", "distrito3.geojson",
+                    "distrito4.geojson", "distrito5.geojson", "distrito6.geojson", "distrito7.geojson"
+                ];
+                propiedadFiltro = "DISTRITO";
+                valorFiltro = dist;
+                tituloPopup = `Distrito: ${dist}`;
+            } else if (prov && prov !== "Seleccione...") {
+                archivosAPescar = ["provincia1.geojson", "provincia2.geojson", "provincia3.geojson", "provincia4.geojson"];
+                propiedadFiltro = "PROVINCIA";
+                valorFiltro = prov;
+                tituloPopup = `Provincia: ${prov}`;
+            } else {
+                archivosAPescar = ["departamentos.geojson"];
+                propiedadFiltro = "DEPARTAMENTO";
+                valorFiltro = dep;
+                tituloPopup = `Departamento: ${dep}`;
             }
         }
 
-        if (featuresFiltrados.length === 0) {
-            alert(`Límites geométricos no encontrados para: ${valorFiltro}. Verifica tus archivos GeoJSON.`);
-            if (loader) loader.style.display = "none";
-            return;
-        }
-
-        // Fusión geométrica (Soporte multizona dinámico para todas las capas fragmentadas)
-        const geometriaUnificada = fusionarGeometrias(featuresFiltrados);
-
-        const geojsonFiltrado = { 
-            type: "FeatureCollection", 
-            features: [{ 
-                type: "Feature", 
-                geometry: geometriaUnificada, 
-                properties: { name: valorFiltro } 
-            }] 
+        const normalizarTexto = (str) => {
+            if (!str) return "";
+            return str.toString().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
         };
 
-        const estiloPoligono = isAmbiental ? 
-            { color: "#27ae60", weight: 3, opacity: 0.9, fillColor: "#2ecc71", fillOpacity: 0.15 } : 
-            { color: "#e74c3c", weight: 3, opacity: 0.9, fillColor: "#f1c40f", fillOpacity: 0.15 };
+        try {
+            let featuresFiltrados = [];
+            const valorBuscadoNormalizado = normalizarTexto(valorFiltro);
+            const depBuscadoNormalizado = normalizarTexto(dep);
 
-        capaGeoJson = L.geoJSON(geojsonFiltrado, { style: estiloPoligono }).addTo(map);
-        const limites = capaGeoJson.getBounds();
+            for (const url of archivosAPescar) {
+                const response = await fetch(url);
+                if (!response.ok) continue;
 
-        if (limites.isValid()) {
-            map.fitBounds(limites);
-            const centro = limites.getCenter();
-            const indicadorSectores = featuresFiltrados.length > 1 ? 
-                `<br><span style="color:#27ae60; font-weight:bold;">⚠️ Unificados ${featuresFiltrados.length} sectores espaciales</span>` : "";
-            
-            let popText = isAmbiental ? 
-                `<b>${tituloPopup}</b>${indicadorSectores}<br><b>Índice:</b> ${ind}<br><b>Satélite:</b> ${sat}` : 
-                `<b>${tituloPopup}</b><br>Prov: ${prov}<br>Dist: ${dist}<br><b>Índice:</b> ${ind}`;
-            
-            marker = L.marker(centro).addTo(map).bindPopup(popText).openPopup();
-        }
+                const geojsonData = await response.json();
 
-        indiceNombre.textContent = ind;
-        sensor.textContent = sat;
-        anio.textContent = anioIni === anioFin ? `${anioIni}` : `${anioIni} - ${anioFin}`;
+                const filtradosEnParte = geojsonData.features.filter(f => {
+                    if (!f.properties) return false;
 
-        ultimaGeometriaConsultada = geometriaUnificada;
+                    if (isAmbiental) {
+                        const props = f.properties;
+                        const llaves = Object.keys(props);
+                        const llaveNombre = llaves.find(k => 
+                            k.toLowerCase() === "anp_nomb" || 
+                            k.toLowerCase() === "za_nomb" || 
+                            k.toLowerCase() === "acr_nomb" || 
+                            k.toLowerCase() === "nombre" ||
+                            k.toLowerCase() === "name"
+                        );
+                        let nombreProp = "";
+                        if (llaveNombre && props[llaveNombre]) {
+                            nombreProp = props[llaveNombre].toString();
+                        } else {
+                            const fallbackLlave = llaves.find(k => k.toLowerCase().includes("nomb"));
+                            if (fallbackLlave && props[fallbackLlave]) {
+                                nombreProp = props[fallbackLlave].toString();
+                            }
+                        }
+                        return normalizarTexto(nombreProp) === valorBuscadoNormalizado;
+                    } else {
+                        let propLugar = f.properties[propiedadFiltro] || 
+                                        f.properties[propiedadFiltro.substring(0, 9)] || 
+                                        f.properties[`NOM_${propiedadFiltro.substring(0, 4)}`] || 
+                                        f.properties[`NOMB${propiedadFiltro.substring(0, 3)}`] || 
+                                        f.properties["NOM_CAP"] || "";
 
-        // POST request al backend en Render (Mapeado exacto con "año" para Pydantic)
-        const respuestaBackend = await fetch(`${BASE_URL_API_REAL}/calcular-indice-zona`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                indice: ind,
-                año: parseInt(anioIni),
-                geometria: geometriaUnificada
-            })
-        });
+                        let propDep = f.properties["DEPARTAMEN"] || 
+                                      f.properties["DEPARTAMENTO"] || 
+                                      f.properties["NOM_DEP"] || 
+                                      f.properties["NOMDEP"] || "";
 
-        const resultadoBackend = await respuestaBackend.json();
+                        const textoPropiedad = normalizarTexto(propLugar);
+                        const textoDepartamento = normalizarTexto(propDep);
 
-        if (resultadoBackend.status === "success" && resultadoBackend.tile_url) {
-            capaSatelitalGEE = L.tileLayer(resultadoBackend.tile_url, {
-                maxZoom: 18,
-                attribution: 'Google Earth Engine | Geospatial Perú'
-            }).addTo(map);
-            
-            capaGeoJson.setStyle({ fillColor: "transparent", fillOpacity: 0 });
-            capaGeoJson.bringToFront();
+                        if (propiedadFiltro === "DEPARTAMENTO") {
+                            return textoPropiedad === valorBuscadoNormalizado || textoDepartamento === depBuscadoNormalizado;
+                        }
+                        return textoPropiedad === valorBuscadoNormalizado && textoDepartamento === depBuscadoNormalizado;
+                    }
+                });
 
-            // Muestra de valores estadísticos en las tarjetas
-            areaTotal.textContent = (resultadoBackend.area_km2 || 0) + " km²";
-            valorProm.textContent = resultadoBackend.val_prom || "0.000";
-            valorMax.textContent = resultadoBackend.val_max || "0.000";
-            valorMin.textContent = resultadoBackend.val_min || "0.000";
+                if (filtradosEnParte.length > 0) {
+                    featuresFiltrados = featuresFiltrados.concat(filtradosEnParte);
+                }
+            }
 
-            const nombreFilaDep = isAmbiental ? "Área Ambiental" : dep;
-            const nombreFilaProv = isAmbiental ? capaAmb.toUpperCase() : prov;
-            const nombreFilaDist = isAmbiental ? nomArea : dist;
+            if (featuresFiltrados.length === 0) {
+                alert(`Límites geométricos no encontrados para: ${valorFiltro}. Verifica tus archivos GeoJSON.`);
+                if (loader) loader.style.display = "none";
+                return;
+            }
 
-            agregarTabla(nombreFilaDep, nombreFilaProv, nombreFilaDist, ind, anioIni, sat, resultadoBackend.area_km2 || "0");
-        } else {
+            // Fusión geométrica (Soporte multizona dinámico para todas las capas fragmentadas)
+            const geometriaUnificada = fusionarGeometrias(featuresFiltrados);
+
+            const geojsonFiltrado = { 
+                type: "FeatureCollection", 
+                features: [{ 
+                    type: "Feature", 
+                    geometry: geometriaUnificada, 
+                    properties: { name: valorFiltro } 
+                }] 
+            };
+
+            const estiloPoligono = isAmbiental ? 
+                { color: "#27ae60", weight: 3, opacity: 0.9, fillColor: "#2ecc71", fillOpacity: 0.15 } : 
+                { color: "#e74c3c", weight: 3, opacity: 0.9, fillColor: "#f1c40f", fillOpacity: 0.15 };
+
+            capaGeoJson = L.geoJSON(geojsonFiltrado, { style: estiloPoligono }).addTo(map);
+            const limites = capaGeoJson.getBounds();
+
+            if (limites.isValid()) {
+                map.fitBounds(limites);
+                const centro = limites.getCenter();
+                const indicadorSectores = featuresFiltrados.length > 1 ? 
+                    `<br><span style="color:#27ae60; font-weight:bold;">⚠️ Unificados ${featuresFiltrados.length} sectores espaciales</span>` : "";
+                
+                let popText = isAmbiental ? 
+                    `<b>${tituloPopup}</b>${indicadorSectores}<br><b>Índice:</b> ${ind}<br><b>Satélite:</b> ${sat}` : 
+                    `<b>${tituloPopup}</b><br>Prov: ${prov}<br>Dist: ${dist}<br><b>Índice:</b> ${ind}`;
+                
+                marker = L.marker(centro).addTo(map).bindPopup(popText).openPopup();
+            }
+
+            if (indiceNombre) indiceNombre.textContent = ind;
+            if (sensor) sensor.textContent = sat;
+            if (anio) anio.textContent = anioIni === anioFin ? `${anioIni}` : `${anioIni} - ${anioFin}`;
+
+            ultimaGeometriaConsultada = geometriaUnificada;
+
+            // POST request al backend en Render (Mapeado exacto con "año" para Pydantic)
+            const respuestaBackend = await fetch(`${BASE_URL_API_REAL}/calcular-indice-zona`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    indice: ind,
+                    año: parseInt(anioIni),
+                    geometria: geometriaUnificada
+                })
+            });
+
+            const resultadoBackend = await respuestaBackend.json();
+
+            if (resultadoBackend.status === "success" && resultadoBackend.tile_url) {
+                capaSatelitalGEE = L.tileLayer(resultadoBackend.tile_url, {
+                    maxZoom: 18,
+                    attribution: 'Google Earth Engine | Geospatial Perú'
+                }).addTo(map);
+                
+                capaGeoJson.setStyle({ fillColor: "transparent", fillOpacity: 0 });
+                capaGeoJson.bringToFront();
+
+                // Muestra de valores estadísticos en las tarjetas
+                if (areaTotal) areaTotal.textContent = (resultadoBackend.area_km2 || 0) + " km²";
+                if (valorProm) valorProm.textContent = resultadoBackend.val_prom || "0.000";
+                if (valorMax) valorMax.textContent = resultadoBackend.val_max || "0.000";
+                if (valorMin) valorMin.textContent = resultadoBackend.val_min || "0.000";
+
+                const nombreFilaDep = isAmbiental ? "Área Ambiental" : dep;
+                const nombreFilaProv = isAmbiental ? capaAmb.toUpperCase() : prov;
+                const nombreFilaDist = isAmbiental ? nomArea : dist;
+
+                agregarTabla(nombreFilaDep, nombreFilaProv, nombreFilaDist, ind, anioIni, sat, resultadoBackend.area_km2 || "0");
+            } else {
+                generarResultadosManejoFallas();
+                const nombreFilaDep = isAmbiental ? "Área Ambiental" : dep;
+                const nombreFilaProv = isAmbiental ? capaAmb.toUpperCase() : prov;
+                const nombreFilaDist = isAmbiental ? nomArea : dist;
+                agregarTabla(nombreFilaDep, nombreFilaProv, nombreFilaDist, ind, anioIni, sat, "Error GEE");
+            }
+
+        } catch (error) {
+            console.error("Error en consulta:", error);
+            alert("Error de red o procesamiento con servidores GEE.");
             generarResultadosManejoFallas();
-            const nombreFilaDep = isAmbiental ? "Área Ambiental" : dep;
-            const nombreFilaProv = isAmbiental ? capaAmb.toUpperCase() : prov;
-            const nombreFilaDist = isAmbiental ? nomArea : dist;
-            agregarTabla(nombreFilaDep, nombreFilaProv, nombreFilaDist, ind, anioIni, sat, "Error GEE");
+        } finally {
+            if (loader) loader.style.display = "none";
         }
-
-    } catch (error) {
-        console.error("Error en consulta:", error);
-        alert("Error de red o procesamiento con servidores GEE.");
-        generarResultadosManejoFallas();
-    } finally {
-        if (loader) loader.style.display = "none";
-    }
-});
+    });
+}
 
 /*==========================
     PROCESADOR DE TABLA 
 ==========================*/
 
 function agregarTabla(dep, prov, dist, ind, anioIni, sat, areaKm2) {
+    if (!tabla) return;
     const nombreProvincia = (prov === 'Seleccione...' || !prov) ? 'No especificado' : prov;
     const nombreDistrito = (dist === 'Seleccione...' || !dist) ? 'No especificado' : dist;
     
@@ -675,78 +678,87 @@ function agregarTabla(dep, prov, dist, ind, anioIni, sat, areaKm2) {
 }
 
 function generarResultadosManejoFallas() {
-    areaTotal.textContent = "N/A km²";
-    valorProm.textContent = "0.000";
-    valorMax.textContent = "0.000";
-    valorMin.textContent = "0.000";
+    if (areaTotal) areaTotal.textContent = "N/A km²";
+    if (valorProm) valorProm.textContent = "0.000";
+    if (valorMax) valorMax.textContent = "0.000";
+    if (valorMin) valorMin.textContent = "0.000";
 }
 
 /*==========================
     LIMPIAR PANEL Y CAPAS
 ==========================*/
 
-btnLimpiar.addEventListener("click", () => {
-    if (tipoConsulta) tipoConsulta.value = "politico";
-    if (grupoAmbiental) grupoAmbiental.style.display = "none";
-    if (grupoPolitico) grupoPolitico.style.display = "block";
-    if (capaAmbiental) capaAmbiental.value = "Seleccione...";
-    
-    if (nombreArea) {
-        nombreArea.innerHTML = '<option value="Seleccione...">Seleccione una categoría primero...</option>';
-        nombreArea.disabled = true;
-    }
+if (btnLimpiar) {
+    btnLimpiar.addEventListener("click", () => {
+        if (tipoConsulta) tipoConsulta.value = "politico";
+        if (grupoAmbiental) grupoAmbiental.style.display = "none";
+        if (grupoPolitico) grupoPolitico.style.display = "block";
+        if (capaAmbiental) capaAmbiental.value = "Seleccione...";
+        
+        if (nombreArea) {
+            nombreArea.innerHTML = '<option value="Seleccione...">Seleccione una categoría primero...</option>';
+            nombreArea.disabled = true;
+        }
 
-    deshabilitarUbigeo(false);
-    cargarDepartamentosReal();
+        deshabilitarUbigeo(false);
+        cargarDepartamentosReal();
 
-    if (provincia) provincia.innerHTML = '<option value="Seleccione...">Seleccione...</option>';
-    if (distrito) distrito.innerHTML = '<option value="Seleccione...">Seleccione...</option>';
+        if (provincia) provincia.innerHTML = '<option value="Seleccione...">Seleccione...</option>';
+        if (distrito) distrito.innerHTML = '<option value="Seleccione...">Seleccione...</option>';
 
-    satelite.value = "Landsat 5";
-    validarYFiltrarAniosPorSatelite();
-    
-    objetivo.value = "Vegetación";
-    actualizarIndicesPorObjetivo();
+        if (satelite) satelite.value = "Landsat 5";
+        validarYFiltrarAniosPorSatelite();
+        
+        if (objetivo) objetivo.value = "Vegetación";
+        actualizarIndicesPorObjetivo();
 
-    indiceNombre.textContent = "NDVI";
-    sensor.textContent = "Landsat 5";
-    anio.textContent = "2010";
+        if (indiceNombre) indiceNombre.textContent = "NDVI";
+        if (sensor) sensor.textContent = "Landsat 5";
+        if (anio) anio.textContent = "2010";
 
-    areaTotal.textContent = "0 km²";
-    valorProm.textContent = "0.00";
-    valorMax.textContent = "0.00";
-    valorMin.textContent = "0.00";
+        if (areaTotal) areaTotal.textContent = "0 km²";
+        if (valorProm) valorProm.textContent = "0.00";
+        if (valorMax) valorMax.textContent = "0.00";
+        if (valorMin) valorMin.textContent = "0.00";
 
-    tabla.innerHTML = "";
+        if (tabla) tabla.innerHTML = "";
 
-    if (capaGeoJson && map.hasLayer(capaGeoJson)) map.removeLayer(capaGeoJson);
-    if (marker && map.hasLayer(marker)) map.removeLayer(marker);
-    if (capaSatelitalGEE && map.hasLayer(capaSatelitalGEE)) map.removeLayer(capaSatelitalGEE);
+        if (capaGeoJson && map.hasLayer(capaGeoJson)) map.removeLayer(capaGeoJson);
+        if (marker && map.hasLayer(marker)) map.removeLayer(marker);
+        if (capaSatelitalGEE && map.hasLayer(capaSatelitalGEE)) map.removeLayer(capaSatelitalGEE);
 
-    ultimaGeometriaConsultada = null;
-    map.setView([-9.19, -75.0152], 6);
-});
+        ultimaGeometriaConsultada = null;
+        map.setView([-9.19, -75.0152], 6);
+    });
+}
 
 /*==========================
     GEOFOCALIZACIÓN Y FULLSCREEN
 ==========================*/
 
-document.querySelector(".toolbar-right button:nth-child(2)").addEventListener("click", () => {
-    map.locate({ setView: true, maxZoom: 10 });
-    map.on("locationfound", e => {
-        if (marker && map.hasLayer(marker)) map.removeLayer(marker);
-        marker = L.marker(e.latlng).addTo(map).bindPopup("Ubicación actual GPS").openPopup();
+const btnGps = document.querySelector(".toolbar-right button:nth-child(2)");
+if (btnGps) {
+    btnGps.addEventListener("click", () => {
+        map.locate({ setView: true, maxZoom: 10 });
+        map.on("locationfound", e => {
+            if (marker && map.hasLayer(marker)) map.removeLayer(marker);
+            marker = L.marker(e.latlng).addTo(map).bindPopup("Ubicación actual GPS").openPopup();
+        });
     });
-});
+}
 
-document.querySelector(".toolbar-right button:nth-child(3)").addEventListener("click", () => {
-    const elem = document.getElementById("map");
-    if (!document.fullscreenElement) {
-        elem.requestFullscreen();
-    } else {
-        document.exitFullscreen();
-    }
-});
+const btnFullscreen = document.querySelector(".toolbar-right button:nth-child(3)");
+if (btnFullscreen) {
+    btnFullscreen.addEventListener("click", () => {
+        const elem = document.getElementById("map");
+        if (!elem) return;
+        if (!document.fullscreenElement) {
+            elem.requestFullscreen();
+        } else {
+            document.exitFullscreen();
+        }
+    });
+}
 
 /*=======================================================================
     SISTEMA DE DESCARGAS CIENTÍFICAS MEJORADO
