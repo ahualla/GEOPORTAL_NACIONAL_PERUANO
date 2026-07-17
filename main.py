@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, status
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -22,8 +22,8 @@ except ImportError:
 
 app = FastAPI(
     title="Geoportal Nacional Peruano API",
-    description="Backend de alto rendimiento blindado contra payloads vacíos para Google Earth Engine",
-    version="4.0.0"
+    description="Backend de alto rendimiento para análisis geoespacial con Google Earth Engine",
+    version="3.0.0"
 )
 
 # --- CONFIGURACIÓN DE CORS ---
@@ -35,7 +35,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- INICIALIZACIÓN SEGURA DE GOOGLE EARTH ENGINE ---
+# --- INICIALIZACIÓN DE GOOGLE EARTH ENGINE ---
 try:
     gee_json_env = os.environ.get("GEE_JSON")
     if gee_json_env:
@@ -54,12 +54,12 @@ try:
             print(f"✔ GEE conectado localmente usando: {ruta_json_local}")
         else:
             ee.Initialize(project='ee-tesistambopata1')
-            print("✔ GEE conectado usando credenciales por defecto.")
+            print("✔ GEE conectado.")
 except Exception as e:
-    print("❌ Error crítico de conexión inicial con Earth Engine:", str(e))
+    print("❌ Error de conexión con Earth Engine:", str(e))
 
 
-# --- MODELOS DE DATOS (PYDANTIC) ---
+# --- MODELOS DE DATOS ---
 INDICES_SOPORTADOS = ["NDVI", "EVI", "SAVI", "GCI", "MSAVI", "ARVI", "NDRE", "NDWI", "MNDWI", "NDMI", "LSWI", "NDSI", "BAI", "BSI", "NBR", "CRI"]
 
 class ConsultaMapa(BaseModel):
@@ -73,7 +73,7 @@ class ConsultaMapa(BaseModel):
         try:
             return int(v)
         except (ValueError, TypeError):
-            raise ValueError("El año debe ser un número entero válido.")
+            raise ValueError("El año debe ser un número entero.")
 
     @field_validator('indice')
     @classmethod
@@ -93,7 +93,7 @@ class DatosReportePDF(ConsultaMapa):
     satelite: str
 
 
-# --- PROCESADORES DE IMÁGENES SATELITALES ---
+# --- PROCESADORES SATELITALES ---
 def obtener_imagen_por_año(año, region_ee):
     start_date = f"{año}-01-01"
     end_date = f"{año}-12-31"
@@ -103,8 +103,6 @@ def obtener_imagen_por_año(año, region_ee):
                      .filterDate(start_date, end_date)
                      .filterBounds(region_ee)  
                      .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 40)))
-        if coleccion.size().getInfo() == 0:
-            raise ValueError(f"No se encontraron imágenes Sentinel-2 válidas (sin nubes) para el año {año} en esta zona.")
         img = coleccion.median()
         return img.select(['B2', 'B3', 'B4', 'B5', 'B8', 'B11'], ['BLUE', 'GREEN', 'RED', 'RED_EDGE', 'NIR', 'SWIR'])
 
@@ -113,8 +111,6 @@ def obtener_imagen_por_año(año, region_ee):
                      .filterDate(start_date, end_date)
                      .filterBounds(region_ee)
                      .filter(ee.Filter.lt('CLOUD_COVER', 40)))
-        if coleccion.size().getInfo() == 0:
-            raise ValueError(f"No se encontraron imágenes Landsat 8 para el año {año} en esta zona.")
         img = coleccion.median()
         return img.select(['SR_B2', 'SR_B3', 'SR_B4', 'SR_B5', 'SR_B6'], ['BLUE', 'GREEN', 'RED', 'NIR', 'SWIR']).addBands(ee.Image(0).rename('RED_EDGE'))
 
@@ -123,8 +119,6 @@ def obtener_imagen_por_año(año, region_ee):
                      .filterDate(start_date, end_date)
                      .filterBounds(region_ee)
                      .filter(ee.Filter.lt('CLOUD_COVER', 40)))
-        if coleccion.size().getInfo() == 0:
-            raise ValueError(f"No hay registros limpios en el archivo histórico de Landsat 5 para el año {año}.")
         img = coleccion.median()
         return img.select(['SR_B1', 'SR_B2', 'SR_B3', 'SR_B4', 'SR_B5'], ['BLUE', 'GREEN', 'RED', 'NIR', 'SWIR']).addBands(ee.Image(0).rename('RED_EDGE'))
 
@@ -175,128 +169,56 @@ def obtener_paleta_y_rangos(indice_nombre):
         return ['#2b9348', '#e5e5e5', '#f4a261', '#e76f51', '#b7094c', '#510a32'], -0.25, 0.65
 
 
-# --- CAPA DE SEGURIDAD INTERNA: EXTRACTOR UNIVERSAL DE GEOMETRÍAS ---
-def procesar_pipeline_gee(datos: ConsultaMapa):
-    geom_cruda = datos.geometria
-    
-    # Validador y extractor robusto de GeoJSON
-    if not geom_cruda or not isinstance(geom_cruda, dict):
-        raise ValueError("El cuerpo de la geometría está vacío o no es un JSON válido.")
-        
-    # Si viene envuelto en un FeatureCollection extrae el primer elemento
-    if geom_cruda.get("type") == "FeatureCollection" and "features" in geom_cruda:
-        if len(geom_cruda["features"]) == 0:
-            raise ValueError("El FeatureCollection no contiene ningún polígono válido.")
-        geom_cruda = geom_cruda["features"][0]
-        
-    # Si viene envuelto en un Feature extrae la geometría interna
-    if geom_cruda.get("type") == "Feature" and "geometry" in geom_cruda:
-        geom_cruda = geom_cruda["geometry"]
-        
-    # Verificación final de coordenadas básicas antes de enviarlo a los servidores de Google
-    if "coordinates" not in geom_cruda or not geom_cruda["coordinates"]:
-        raise ValueError("Estructura GeoJSON inválida: No se encontraron 'coordinates' válidas en la petición.")
-
-    try:
-        region_ee = ee.Geometry(geom_cruda, 'EPSG:4326').buffer(0)
-    except Exception as ex_geom:
-        raise ValueError(f"Google Earth Engine no pudo mapear este polígono. Detalles geométricos: {str(ex_geom)}")
-    
-    imagen_base = obtener_imagen_por_año(datos.año, region_ee)
-    resultado_indice = calcular_todos_los_indices(imagen_base, datos.indice, datos.año)
-    resultado_recortado = resultado_indice.clip(region_ee)
-    
-    scale = 10 if datos.año >= 2015 else 30
-    
-    try:
-        area_km2 = round(region_ee.area(maxError=1).getInfo() / 1000000.0, 2)
-        if area_km2 <= 0.0:
-            raise ValueError("El polígono dibujado tiene un área de 0 km² o está superpuesto erróneamente.")
-    except Exception:
-        area_km2 = 0.0
-    
-    # Forzar el cálculo inmediato en GEE. Si la zona procesada arroja nulos, se detiene el flujo aquí.
-    try:
-        estadisticas = resultado_recortado.reduceRegion(
-            reducer=ee.Reducer.mean().combine(reducer2=ee.Reducer.max(), sharedInputs=True).combine(reducer2=ee.Reducer.min(), sharedInputs=True),
-            geometry=region_ee,
-            scale=scale,
-            maxPixels=1e9
-        ).getInfo()
-    except Exception as ex_gee:
-        raise ValueError(f"Fallo matemático al calcular los píxeles de la zona. Asegúrate de que las coordenadas correspondan a Perú. Detalles: {str(ex_gee)}")
-    
-    if not estadisticas or list(estadisticas.values())[0] is None:
-        raise ValueError("El análisis espacial retornó valores vacíos (NaN/Null). La zona seleccionada no contiene imágenes de satélite legibles en este período.")
-
-    nombre_banda = datos.indice.upper()
-    val_prom = f"{round(estadisticas.get(f'{nombre_banda}_mean') or 0.0, 3):.3f}"
-    val_max = f"{round(estadisticas.get(f'{nombre_banda}_max') or 0.0, 3):.3f}"
-    val_min = f"{round(estadisticas.get(f'{nombre_banda}_min') or 0.0, 3):.3f}"
-    
-    return {
-        "imagen_recortada": resultado_recortado,
-        "region_ee": region_ee,
-        "area_km2": area_km2,
-        "scale": scale,
-        "val_prom": val_prom,
-        "val_max": val_max,
-        "val_min": val_min
-    }
-
-
-# --- ENDPOINTS OPTIMIZADOS ---
+# --- ENDPOINTS ORIGINALES RESTAURADOS ---
 
 @app.post("/calcular-indice-zona")
 def procesar_mapa_zona(datos: ConsultaMapa):
     try:
-        pipeline = procesar_pipeline_gee(datos)
+        region_ee = ee.Geometry(datos.geometria)
+        imagen_base = obtener_imagen_por_año(datos.año, region_ee)
+        resultado_indice = calcular_todos_los_indices(imagen_base, datos.indice, datos.año)
+        resultado_recortado = resultado_indice.clip(region_ee)
+        
         paleta, min_val, max_val = obtener_paleta_y_rangos(datos.indice)
-        map_id_dict = pipeline["imagen_recortada"].getMapId({'min': min_val, 'max': max_val, 'palette': paleta})
+        map_id_dict = resultado_recortado.getMapId({'min': min_val, 'max': max_val, 'palette': paleta})
         
         return {
             "status": "success",
             "indice": datos.indice.upper(),
             "año": datos.año,
-            "tile_url": map_id_dict['tile_fetcher'].url_format,
-            "area_km2": pipeline["area_km2"],
-            "val_prom": pipeline["val_prom"],
-            "val_max": pipeline["val_max"],
-            "val_min": pipeline["val_min"]
+            "tile_url": map_id_dict['tile_fetcher'].url_format
         }
-    except ValueError as ve:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(ve))
     except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Error en GEE: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/descargar-tiff")
 def descargar_tiff_zona(datos: ConsultaMapa):
     try:
-        pipeline = procesar_pipeline_gee(datos)
-        url_descarga = pipeline["imagen_recortada"].getDownloadURL({
-            'scale': pipeline["scale"],
+        region_ee = ee.Geometry(datos.geometria)
+        imagen_base = obtener_imagen_por_año(datos.año, region_ee)
+        resultado_indice = calcular_todos_los_indices(imagen_base, datos.indice, datos.año)
+        resultado_recortado = resultado_indice.clip(region_ee)
+        
+        scale = 10 if datos.año >= 2015 else 30
+        url_descarga = resultado_recortado.getDownloadURL({
+            'scale': scale,
             'crs': 'EPSG:4326',
-            'region': pipeline["region_ee"],
+            'region': region_ee,
             'format': 'GEO_TIFF'
         })
         return {"status": "success", "download_url": url_descarga}
-    except ValueError as ve:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(ve))
     except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/descargar-pdf")
 def descargar_pdf_reporte(datos: DatosReportePDF):
     if not REPORTLAB_DISPONIBLE:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="ReportLab no configurado en este entorno.")
+        raise HTTPException(status_code=500, detail="ReportLab no disponible.")
         
     try:
-        # El pipeline arrojará un error explícito si la geometría o los datos espaciales están en blanco
-        pipeline = procesar_pipeline_gee(datos)
         buffer = io.BytesIO()
-        
         doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=40, leftMargin=40, topMargin=40, bottomMargin=40)
         story = []
         
@@ -306,37 +228,26 @@ def descargar_pdf_reporte(datos: DatosReportePDF):
         style_txt = ParagraphStyle('TXT', parent=styles['Normal'], fontSize=10, leading=14)
         style_th = ParagraphStyle('TH', parent=styles['Normal'], fontSize=10, fontName='Helvetica-Bold', textColor=colors.white)
 
-        story.append(Paragraph("GEOPORTAL NACIONAL PERUANO — REPORTE TÉCNICO GEOESPACIAL", style_titulo))
+        story.append(Paragraph("GEOPORTAL NACIONAL PERUANO — REPORTE TÉCNICO", style_titulo))
         story.append(Paragraph(f"<b>Ubicación:</b> {datos.departamento} -> {datos.provincia} -> {datos.distrito}", style_txt))
-        story.append(Paragraph(f"<b>Satélite Utilizado:</b> {datos.satelite} | <b>Motor de cálculo:</b> GEE Cloud Engine", style_txt))
+        story.append(Paragraph(f"<b>Satélite:</b> {datos.satelite}", style_txt))
         story.append(Spacer(1, 15))
         
-        story.append(Paragraph("Resultados Estadísticos del Análisis de Píxeles", style_sub))
+        story.append(Paragraph("Resultados del Análisis", style_sub))
         
         tabla_datos = [
-            [Paragraph("Métrica Evaluada", style_th), Paragraph("Valor Calculado", style_th)],
-            [Paragraph("Índice Espectral Seleccionado", style_txt), Paragraph(datos.indice.upper(), style_txt)],
-            [Paragraph("Año de Muestreo Temporal", style_txt), Paragraph(str(datos.año), style_txt)],
-            [Paragraph("Superficie Evaluada (km²)", style_txt), Paragraph(f"{pipeline['area_km2']} km²", style_txt)],
-            [Paragraph("Resolución del Sensor Espacial", style_txt), Paragraph(f"{pipeline['scale']} metros", style_txt)],
-            [Paragraph("Valor Medio Obtenido (Mean)", style_txt), Paragraph(pipeline["val_prom"], style_txt)],
-            [Paragraph("Valor Máximo Encontrado (Max)", style_txt), Paragraph(pipeline["val_max"], style_txt)],
-            [Paragraph("Valor Mínimo Encontrado (Min)", style_txt), Paragraph(pipeline["val_min"], style_txt)],
+            [Paragraph("Métrica", style_th), Paragraph("Valor", style_th)],
+            [Paragraph("Índice Seleccionado", style_txt), Paragraph(datos.indice.upper(), style_txt)],
+            [Paragraph("Año", style_txt), Paragraph(str(datos.año), style_txt)],
         ]
         
         t = Table(tabla_datos, colWidths=[240, 240])
         t.setStyle(TableStyle([
             ('BACKGROUND', (0,0), (1,0), colors.HexColor('#0F3A20')),
             ('ALIGN', (0,0), (-1,-1), 'LEFT'),
-            ('ROWBACKGROUNDS', (0,1), (-1,-1), [colors.HexColor('#F8F9F9'), colors.white]),
             ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#BDC3C7')),
-            ('TOPPADDING', (0,0), (-1,-1), 6),
-            ('BOTTOMPADDING', (0,0), (-1,-1), 6),
         ]))
         story.append(KeepTogether([t]))
-        story.append(Spacer(1, 15))
-        
-        story.append(Paragraph("<b>Certificación:</b> Archivo generado dinámicamente conectando los servidores de procesamiento espacial. Sistema de Referencia Geográfico base: WGS84 / EPSG:4326.", style_txt))
         
         doc.build(story)
         buffer.seek(0)
@@ -346,60 +257,47 @@ def descargar_pdf_reporte(datos: DatosReportePDF):
             media_type="application/pdf", 
             headers={"Content-Disposition": f"attachment; filename=REPORTE_{datos.indice.upper()}_{datos.año}.pdf"}
         )
-    except ValueError as ve:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(ve))
     except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Error al estructurar el PDF: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/descargar-shp")
 def descargar_shp_data(datos: DatosReportePDF):
     try:
-        pipeline = procesar_pipeline_gee(datos)
-        
-        # Mapeo blindado de atributos para la tabla .dbf del Shapefile (Conversiones explícitas de tipo)
-        feature = ee.Feature(pipeline["region_ee"], {
-            'DEPARTAMEN': str(datos.departamento)[:254], 
-            'PROVINCIA': str(datos.provincia)[:254],
-            'DISTRITO': str(datos.distrito)[:254],
-            'INDICE': str(datos.indice.upper()),
-            'ANIO': int(datos.año),
-            'AREA_KM2': float(pipeline["area_km2"]),
-            'VAL_PROM': float(pipeline["val_prom"])
+        region_ee = ee.Geometry(datos.geometria)
+        feature = ee.Feature(region_ee, {
+            'DEPARTAMEN': datos.departamento, 
+            'PROVINCIA': datos.provincia,
+            'DISTRITO': datos.distrito,
+            'INDICE': datos.indice.upper(),
+            'ANIO': datos.año
         })
         
         fc = ee.FeatureCollection([feature])
-        
         url_shp_gee = fc.getDownloadURL(
             filetype='SHP', 
-            selectors=['DEPARTAMEN', 'PROVINCIA', 'DISTRITO', 'INDICE', 'ANIO', 'AREA_KM2', 'VAL_PROM'], 
-            filename='Geoportal_Export_Vectorial'
+            selectors=['DEPARTAMEN', 'PROVINCIA', 'DISTRITO', 'INDICE', 'ANIO'], 
+            filename='Geoportal_Export'
         )
         
         respuesta_gee = requests.get(url_shp_gee, timeout=30)
-        if respuesta_gee.status_code != 200:
-            raise ValueError("Google Earth Engine no pudo empaquetar los archivos internos del Shapefile.")
-            
         buffer_zip = io.BytesIO(respuesta_gee.content)
         buffer_zip.seek(0)
         
-        filename_limpio = f"SHP_{datos.departamento}_{datos.provincia}_{datos.distrito}".replace(" ", "_")
         return StreamingResponse(
             buffer_zip, 
             media_type="application/zip", 
-            headers={"Content-Disposition": f"attachment; filename={filename_limpio}.zip"}
+            headers={"Content-Disposition": "attachment; filename=export_shp.zip"}
         )
-    except ValueError as ve:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(ve))
     except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Falla en la compresión SHP: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
-# --- ENRUTAMIENTO ESTÁTICO DE INTERFAZ ---
+# --- ENRUTAMIENTO ESTÁTICO ---
 @app.get("/", response_class=HTMLResponse)
 def read_root():
     if os.path.exists("index.html"):
         return FileResponse("index.html")
-    return "<h1>✔ Servidor Backend Activo y Protegido</h1>"
+    return "<h1>✔ Servidor Backend Activo</h1>"
 
 app.mount("/", StaticFiles(directory=".", html=True), name="static")
